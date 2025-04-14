@@ -181,3 +181,180 @@ def register_routes(app):
             return redirect(url_for('index'))
             
         return render_template('game_result.html', game=game)
+        
+    # Payment routes
+    @app.route('/deposit', methods=['GET', 'POST'])
+    def deposit():
+        """Handle deposits using Capa Wallet"""
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            flash('You must be logged in to make a deposit.', 'danger')
+            return redirect(url_for('index'))
+        
+        if request.method == 'POST':
+            try:
+                amount = float(request.form.get('amount', 0))
+            except ValueError:
+                flash('Invalid amount.', 'danger')
+                return redirect(url_for('deposit'))
+                
+            from payments import PaymentSystem
+            
+            success, result = PaymentSystem.deposit(user_id, amount)
+            
+            if not success:
+                flash(result, 'danger')
+                return redirect(url_for('deposit'))
+                
+            # If result is a string, it's an error message
+            if isinstance(result, str):
+                flash(result, 'danger')
+                return redirect(url_for('deposit'))
+                
+            # For successful payment, redirect to payment page
+            payment_url = result.get('payment_url', '')
+            payment_id = result.get('payment_id', '')
+            expires_at = result.get('expires_at', '')
+            
+            # Convert timestamp to readable format
+            from datetime import datetime
+            expires_at_formatted = datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S') if expires_at else ''
+            
+            return render_template(
+                'payment.html',
+                amount=amount,
+                payment_status='pending',
+                wallet_address='capa_wallet_deposit_address',
+                payment_id=payment_id,
+                payment_url=payment_url,
+                expires_at_formatted=expires_at_formatted
+            )
+            
+        # GET request - show deposit form
+        user = User.query.get(user_id)
+        return render_template('deposit.html', user=user)
+        
+    @app.route('/withdraw', methods=['GET', 'POST'])
+    def withdraw():
+        """Handle withdrawals using Capa Wallet"""
+        # Check if user is logged in
+        user_id = session.get('user_id')
+        if not user_id:
+            flash('You must be logged in to make a withdrawal.', 'danger')
+            return redirect(url_for('index'))
+            
+        if request.method == 'POST':
+            try:
+                amount = float(request.form.get('amount', 0))
+            except ValueError:
+                flash('Invalid amount.', 'danger')
+                return redirect(url_for('withdraw'))
+                
+            wallet_address = request.form.get('wallet_address', '')
+            if not wallet_address:
+                flash('Wallet address is required.', 'danger')
+                return redirect(url_for('withdraw'))
+                
+            from payments import PaymentSystem
+            
+            success, result = PaymentSystem.request_withdrawal(user_id, amount)
+            
+            if not success:
+                flash(result, 'danger')
+                return redirect(url_for('withdraw'))
+                
+            # If result is a dictionary, it contains transaction info
+            if isinstance(result, dict):
+                message = result.get('message', 'Withdrawal request submitted successfully.')
+                flash(message, 'success')
+            else:
+                flash(result, 'success')
+                
+            return redirect(url_for('dashboard'))
+            
+        # GET request - show withdrawal form
+        user = User.query.get(user_id)
+        return render_template('withdraw.html', user=user)
+        
+    @app.route('/payment/status/<payment_id>')
+    def payment_status(payment_id):
+        """Check the status of a payment"""
+        from capa_wallet import CapaWallet
+        
+        success, is_paid, data = CapaWallet.verify_payment(payment_id)
+        
+        if not success:
+            return jsonify({'success': False, 'message': 'Failed to verify payment'})
+            
+        return jsonify({
+            'success': True,
+            'status': 'completed' if is_paid else 'pending',
+            'payment_data': data
+        })
+        
+    @app.route('/payment/success')
+    def payment_success():
+        """Payment success redirect from Capa Wallet"""
+        payment_id = request.args.get('payment_id', '')
+        
+        if not payment_id:
+            flash('Invalid payment reference.', 'danger')
+            return redirect(url_for('dashboard'))
+            
+        # Verify the payment
+        from capa_wallet import CapaWallet
+        
+        success, is_paid, data = CapaWallet.verify_payment(payment_id)
+        
+        if not success or not is_paid:
+            flash('Payment verification failed.', 'danger')
+            return redirect(url_for('dashboard'))
+            
+        flash('Payment completed successfully!', 'success')
+        return redirect(url_for('dashboard'))
+        
+    @app.route('/payment/cancel')
+    def payment_cancel():
+        """Payment cancellation redirect from Capa Wallet"""
+        flash('Payment was cancelled.', 'warning')
+        return redirect(url_for('dashboard'))
+        
+    @app.route('/api/payment/webhook', methods=['POST'])
+    def payment_webhook():
+        """Webhook endpoint for Capa Wallet payment updates"""
+        # Verify the webhook signature
+        from capa_wallet import CapaWallet
+        
+        signature = request.headers.get('X-Capa-Signature', '')
+        payload = request.get_data(as_text=True)
+        
+        if not CapaWallet.verify_webhook_signature(payload, signature):
+            return jsonify({'success': False, 'message': 'Invalid signature'}), 400
+            
+        # Process the webhook payload
+        data = request.json
+        event_type = data.get('event_type', '')
+        payment_id = data.get('payment_id', '')
+        
+        if not payment_id:
+            return jsonify({'success': False, 'message': 'Invalid payment ID'}), 400
+            
+        # Find the transaction
+        transaction = Transaction.query.filter_by(reference_id=payment_id).first()
+        
+        if not transaction:
+            return jsonify({'success': False, 'message': 'Transaction not found'}), 404
+            
+        # Update transaction status based on event type
+        if event_type == 'payment.completed':
+            # Process the payment
+            from payments import PaymentSystem
+            PaymentSystem._process_successful_payment(transaction.id)
+            
+        elif event_type == 'payment.failed':
+            # Mark as failed
+            transaction.status = 'failed'
+            db.session.commit()
+            
+        return jsonify({'success': True})

@@ -4,7 +4,7 @@ from functools import wraps
 # Temporarily disable telegram imports for web interface
 # from telegram import Update
 # from telegram.ext import CallbackContext
-from config import COOLDOWN_SECONDS, LOGGER
+from config import LOGGER, CREATE_ACCOUNT_COOLDOWN, DELETE_ACCOUNT_COOLDOWN, DEPOSIT_COOLDOWN, WITHDRAW_COOLDOWN, JOIN_GAME_COOLDOWN
 from models import User, Cooldown
 from app import db
 
@@ -69,8 +69,21 @@ def cooldown(seconds=None):
                 await update.message.reply_text("You need to create an account first. Use /create_account.")
                 return
                 
-            # Check for cooldown
-            cooldown_time = seconds if seconds is not None else COOLDOWN_SECONDS
+            # Check for cooldown - default to 60 seconds if not specified
+            # Use command specific cooldowns if available
+            default_cooldown = 60  # Default cooldown of 1 minute
+            if command_name == 'create_account':
+                default_cooldown = CREATE_ACCOUNT_COOLDOWN
+            elif command_name == 'delete_account':
+                default_cooldown = DELETE_ACCOUNT_COOLDOWN
+            elif command_name == 'deposit':
+                default_cooldown = DEPOSIT_COOLDOWN
+            elif command_name == 'withdraw':
+                default_cooldown = WITHDRAW_COOLDOWN
+            elif command_name == 'join_game':
+                default_cooldown = JOIN_GAME_COOLDOWN
+            
+            cooldown_time = seconds if seconds is not None else default_cooldown
             now = datetime.utcnow()
             
             # Check if user is on cooldown for this command

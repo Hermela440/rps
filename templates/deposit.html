@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deposit Funds - RPS Arena</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
+    <style>
+        .deposit-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .deposit-card {
+            background-color: rgba(52, 58, 64, 0.8);
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3);
+        }
+        
+        .amount-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .amount-option {
+            flex: 1;
+            min-width: 80px;
+        }
+        
+        .payment-method-option {
+            padding: 1rem;
+            border: 1px solid #495057;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .payment-method-option:hover,
+        .payment-method-option.selected {
+            border-color: #0d6efd;
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+        
+        .payment-method-option img {
+            height: 40px;
+            margin-right: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-joystick me-2"></i> RPS Arena
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/leaderboard">Leaderboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">Dashboard</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Deposit Section -->
+    <div class="container my-5">
+        <div class="deposit-container">
+            <h1 class="text-center mb-4">Deposit Funds</h1>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <div class="deposit-card">
+                <form action="/deposit" method="POST" id="depositForm">
+                    <div class="mb-4">
+                        <label for="amount" class="form-label">Current Balance</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="text" class="form-control" value="{{ '%.2f'|format(user.balance) }}" disabled>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="amount" class="form-label">Deposit Amount</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" step="0.01" min="10" max="1000" class="form-control" id="amount" name="amount" required>
+                        </div>
+                        <div class="form-text">Minimum deposit: $10.00 | Maximum deposit: $1,000.00</div>
+                        
+                        <div class="amount-options">
+                            <button type="button" class="btn btn-outline-secondary amount-option" data-amount="10">$10</button>
+                            <button type="button" class="btn btn-outline-secondary amount-option" data-amount="25">$25</button>
+                            <button type="button" class="btn btn-outline-secondary amount-option" data-amount="50">$50</button>
+                            <button type="button" class="btn btn-outline-secondary amount-option" data-amount="100">$100</button>
+                            <button type="button" class="btn btn-outline-secondary amount-option" data-amount="200">$200</button>
+                            <button type="button" class="btn btn-outline-secondary amount-option" data-amount="500">$500</button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">Payment Method</label>
+                        <div class="payment-method-option selected" data-method="capa_wallet">
+                            <div class="d-flex align-items-center">
+                                <img src="/static/images/capa-wallet-logo.svg" alt="Capa Wallet" onerror="this.src='/static/images/capa-wallet-logo.png'; this.onerror=null;">
+                                <div>
+                                    <h5 class="mb-0">Capa Wallet</h5>
+                                    <p class="mb-0 text-muted small">Fast and secure digital currency payments</p>
+                                </div>
+                                <div class="ms-auto">
+                                    <i class="bi bi-check-circle-fill text-primary"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="termsCheck" required>
+                        <label class="form-check-label" for="termsCheck">I agree to the <a href="#" class="text-primary">Terms of Service</a> and <a href="#" class="text-primary">Privacy Policy</a></label>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">Deposit Now</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="bi bi-joystick me-2"></i> RPS Arena</h5>
+                    <p>A Telegram bot game for Rock, Paper, Scissors with virtual betting.</p>
+                </div>
+                <div class="col-md-3">
+                    <h6>Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="/" class="text-decoration-none text-secondary">Home</a></li>
+                        <li><a href="/leaderboard" class="text-decoration-none text-secondary">Leaderboard</a></li>
+                        <li><a href="https://t.me/your_bot_username" class="text-decoration-none text-secondary">Play on Telegram</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Resources</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-decoration-none text-secondary">Help</a></li>
+                        <li><a href="#" class="text-decoration-none text-secondary">FAQ</a></li>
+                        <li><a href="#" class="text-decoration-none text-secondary">Contact Us</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="mt-4">
+            <div class="row">
+                <div class="col text-center">
+                    <p class="small text-muted mb-0">© 2023 RPS Arena. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap and custom scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle amount option buttons
+            const amountOptions = document.querySelectorAll('.amount-option');
+            const amountInput = document.getElementById('amount');
+            
+            amountOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    const amount = this.getAttribute('data-amount');
+                    amountInput.value = amount;
+                    
+                    // Update active state
+                    amountOptions.forEach(opt => opt.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+            
+            // Handle payment method selection
+            const paymentOptions = document.querySelectorAll('.payment-method-option');
+            
+            paymentOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    paymentOptions.forEach(opt => opt.classList.remove('selected'));
+                    this.classList.add('selected');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
