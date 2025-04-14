@@ -161,3 +161,23 @@ def register_routes(app):
             })
         
         return jsonify({'success': True, 'users': results})
+        
+    @app.route('/game/<int:game_id>/result')
+    def game_result(game_id):
+        """Show the result of a completed game with animations"""
+        game = Game.query.get_or_404(game_id)
+        
+        # Ensure the game is completed
+        if game.status != 'completed':
+            flash('This game is not completed yet.', 'warning')
+            return redirect(url_for('index'))
+            
+        # Fetch all participants with their choices
+        participants = GameParticipant.query.filter_by(game_id=game_id).all()
+        
+        # If less than 3 participants, redirect to home
+        if len(participants) < 3:
+            flash('This game does not have enough participants.', 'warning')
+            return redirect(url_for('index'))
+            
+        return render_template('game_result.html', game=game)

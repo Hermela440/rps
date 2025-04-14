@@ -177,7 +177,12 @@
                                 <tbody>
                                     {% for game in recent_games %}
                                     <tr>
-                                        <td>{{ game.id }}</td>
+                                        <td>
+                                            <a href="{{ url_for('game_result', game_id=game.id) }}" class="text-decoration-none">
+                                                #{{ game.id }}
+                                                <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                            </a>
+                                        </td>
                                         <td>${{ "%.2f"|format(game.bet_amount) }}</td>
                                         <td>{{ game.completed_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                     </tr>

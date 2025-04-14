@@ -820,6 +820,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 result_text += f"\nWinnings: ${winnings:.2f}"
                             else:
                                 result_text += "\nResult: Draw - Bets have been refunded."
+                                
+                            # Add link to web animation
+                            base_url = "https://RPS-Arena.replit.app"  # Replace with your actual deployed URL
+                            animation_url = f"{base_url}/game/{game_id}/result"
+                            result_text += f"\n\n🎬 [Watch the battle animation]({animation_url})"
                             
                             await context.bot.send_message(
                                 chat_id=user_obj.telegram_id,
