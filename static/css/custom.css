@@ -1,0 +1,159 @@
+/* 
+ * Custom CSS for RPS Arena
+ * This file contains only custom styles that extend the Bootstrap theme
+ */
+
+/* Feature icons styling */
+.feature-icon {
+    font-size: 2.5rem;
+    color: var(--bs-primary);
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+/* How to play step numbers */
+.step-number {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    background-color: var(--bs-primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    line-height: 40px;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+/* Leaderboard top 3 highlight colors */
+.table-row-highlight-1 {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.table-row-highlight-2 {
+    background-color: rgba(108, 117, 125, 0.1);
+}
+
+.table-row-highlight-3 {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+/* Game icons styling for Rock, Paper, Scissors */
+.rps-icons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+}
+
+.rps-icons span {
+    transition: transform 0.3s ease;
+}
+
+.rps-icons span:hover {
+    transform: scale(1.2);
+}
+
+/* Animate game choice buttons */
+.game-choice-btn {
+    transition: transform 0.2s ease;
+}
+
+.game-choice-btn:hover {
+    transform: translateY(-5px);
+}
+
+/* Status badges styling */
+.status-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Admin dashboard cards with icon styling */
+.dashboard-card-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+/* Dashboard stats card hover effect */
+.stat-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* User search result items */
+.user-search-item {
+    border-left: 4px solid var(--bs-secondary);
+    transition: all 0.2s ease;
+}
+
+.user-search-item:hover {
+    border-left-color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+/* Game choice icons for history display */
+.choice-icon {
+    font-size: 1.25rem;
+    margin-right: 0.5rem;
+}
+
+.choice-rock { color: var(--bs-gray); }
+.choice-paper { color: var(--bs-light); }
+.choice-scissors { color: var(--bs-danger); }
+
+/* Transactions styling by type */
+.transaction-deposit { color: var(--bs-success); }
+.transaction-withdraw { color: var(--bs-danger); }
+.transaction-bet { color: var(--bs-warning); }
+.transaction-win { color: var(--bs-info); }
+.transaction-refund { color: var(--bs-secondary); }
+
+/* Custom spinner for loading states */
+.custom-spinner {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.25rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .rps-icons {
+        flex-direction: row;
+    }
+    
+    .rps-icons span {
+        font-size: 3rem;
+    }
+    
+    .feature-icon {
+        font-size: 2rem;
+    }
+}
+
+/* Add subtle card hover effect throughout the app */
+.card {
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 0.125rem 0.25rem rgba(var(--bs-body-color-rgb), 0.1);
+}
+
+/* Game title animation for homepage */
+@keyframes gameTitle {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.game-title-animate {
+    animation: gameTitle 5s infinite;
+}

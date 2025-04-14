@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - RPS Arena</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-joystick me-2"></i> RPS Arena
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/leaderboard">Leaderboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/admin">Admin</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Admin Panel Content -->
+    <div class="container my-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">
+                    <i class="bi bi-shield-lock me-2"></i> Admin Panel
+                </h1>
+            </div>
+        </div>
+
+        <!-- Admin Tabs -->
+        <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-tab-pane" type="button" role="tab" aria-controls="users-tab-pane" aria-selected="true">
+                    <i class="bi bi-people-fill me-2"></i> User Management
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="games-tab" data-bs-toggle="tab" data-bs-target="#games-tab-pane" type="button" role="tab" aria-controls="games-tab-pane" aria-selected="false">
+                    <i class="bi bi-controller me-2"></i> Game Management
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="transactions-tab" data-bs-toggle="tab" data-bs-target="#transactions-tab-pane" type="button" role="tab" aria-controls="transactions-tab-pane" aria-selected="false">
+                    <i class="bi bi-cash-coin me-2"></i> Transactions
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-tab-pane" type="button" role="tab" aria-controls="settings-tab-pane" aria-selected="false">
+                    <i class="bi bi-gear-fill me-2"></i> Settings
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="adminTabsContent">
+            <!-- Users Tab Panel -->
+            <div class="tab-pane fade show active" id="users-tab-pane" role="tabpanel" aria-labelledby="users-tab" tabindex="0">
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">User Management</h5>
+                        <div class="input-group" style="max-width: 300px;">
+                            <input type="text" class="form-control" id="adminUserSearch" placeholder="Search by username or ID">
+                            <button class="btn btn-light" id="adminUserSearchBtn">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="userSearchResults">
+                            <div class="text-center py-5">
+                                <i class="bi bi-search display-4 text-muted"></i>
+                                <p class="mt-3">Search for users by username or ID</p>
+                            </div>
+                        </div>
+                        
+                        <div id="userDetails" class="mt-4 d-none">
+                            <h4>User Details</h4>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h5 class="card-title" id="userDetailsUsername">Username</h5>
+                                            <p class="card-text" id="userDetailsID">ID: </p>
+                                            <p class="card-text" id="userDetailsTelegramID">Telegram ID: </p>
+                                            <p class="card-text" id="userDetailsBalance">Balance: </p>
+                                            <p class="card-text" id="userDetailsCreated">Created: </p>
+                                            <p class="card-text" id="userDetailsLastActive">Last Active: </p>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="userIsAdmin">
+                                                <label class="form-check-label" for="userIsAdmin">Admin Privileges</label>
+                                            </div>
+                                            <div class="mt-3">
+                                                <button class="btn btn-primary btn-sm" id="saveUserChanges">Save Changes</button>
+                                                <button class="btn btn-danger btn-sm" id="deleteUser">Delete User</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5 class="mb-0">User Statistics</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p id="userDetailsGamesPlayed">Games Played: </p>
+                                            <p id="userDetailsGamesWon">Games Won: </p>
+                                            <p id="userDetailsWinRate">Win Rate: </p>
+                                            <h6 class="mt-4">Recent Transactions</h6>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Date</th>
+                                                            <th>Type</th>
+                                                            <th>Amount</th>
+                                                            <th>Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="userTransactionsList">
+                                                        <!-- User transactions will be loaded here -->
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Games Tab Panel -->
+            <div class="tab-pane fade" id="games-tab-pane" role="tabpanel" aria-labelledby="games-tab" tabindex="0">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Game Management</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="nav nav-pills mb-3" id="gamesTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="active-games-tab" data-bs-toggle="pill" data-bs-target="#active-games" type="button" role="tab" aria-controls="active-games" aria-selected="true">Active Games</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="completed-games-tab" data-bs-toggle="pill" data-bs-target="#completed-games" type="button" role="tab" aria-controls="completed-games" aria-selected="false">Completed Games</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="game-stats-tab" data-bs-toggle="pill" data-bs-target="#game-stats" type="button" role="tab" aria-controls="game-stats" aria-selected="false">Game Statistics</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="gamesTabContent">
+                            <!-- Active Games Tab -->
+                            <div class="tab-pane fade show active" id="active-games" role="tabpanel" aria-labelledby="active-games-tab">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Game ID</th>
+                                                <th>Status</th>
+                                                <th>Bet Amount</th>
+                                                <th>Players</th>
+                                                <th>Created</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="activeGamesList">
+                                            <!-- Active games will be loaded here -->
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading active games...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- Completed Games Tab -->
+                            <div class="tab-pane fade" id="completed-games" role="tabpanel" aria-labelledby="completed-games-tab">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Game ID</th>
+                                                <th>Bet Amount</th>
+                                                <th>Players</th>
+                                                <th>Winner</th>
+                                                <th>Completed</th>
+                                                <th>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="completedGamesList">
+                                            <!-- Completed games will be loaded here -->
+                                            <tr>
+                                                <td colspan="6" class="text-center">Loading completed games...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="d-flex justify-content-center mt-3">
+                                    <nav aria-label="Game pages">
+                                        <ul class="pagination">
+                                            <li class="page-item disabled">
+                                                <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                                            </li>
+                                            <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                                            <li class="page-item"><a class="page-link" href="#">2</a></li>
+                                            <li class="page-item"><a class="page-link" href="#">3</a></li>
+                                            <li class="page-item">
+                                                <a class="page-link" href="#">Next</a>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                </div>
+                            </div>
+                            
+                            <!-- Game Statistics Tab -->
+                            <div class="tab-pane fade" id="game-stats" role="tabpanel" aria-labelledby="game-stats-tab">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h5 class="mb-0">Game Outcomes</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <canvas id="gameOutcomesChart" height="250"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h5 class="mb-0">Player Choices</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <canvas id="playerChoicesChart" height="250"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card mt-4">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Game Activity</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <canvas id="gameActivityChart" height="250"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Tab Panel -->
+            <div class="tab-pane fade" id="transactions-tab-pane" role="tabpanel" aria-labelledby="transactions-tab" tabindex="0">
+                <div class="card">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Transaction Management</h5>
+                        <div class="d-flex">
+                            <select class="form-select form-select-sm me-2" id="transactionTypeFilter">
+                                <option value="all">All Types</option>
+                                <option value="deposit">Deposits</option>
+                                <option value="withdraw">Withdrawals</option>
+                                <option value="bet">Bets</option>
+                                <option value="win">Winnings</option>
+                                <option value="refund">Refunds</option>
+                            </select>
+                            <select class="form-select form-select-sm" id="transactionStatusFilter">
+                                <option value="all">All Statuses</option>
+                                <option value="pending">Pending</option>
+                                <option value="completed">Completed</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>User</th>
+                                        <th>Type</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Reference</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transactionsList">
+                                    <!-- Transactions will be loaded here -->
+                                    <tr>
+                                        <td colspan="7" class="text-center">Loading transactions...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex justify-content-center mt-3">
+                            <nav aria-label="Transaction pages">
+                                <ul class="pagination">
+                                    <li class="page-item disabled">
+                                        <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                                    </li>
+                                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="#">Next</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Withdrawal Management -->
+                <div class="card mt-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">Pending Withdrawals</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="pendingWithdrawals">
+                            <!-- Pending withdrawals will be loaded here -->
+                            <div class="text-center py-3">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Loading pending withdrawals...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab Panel -->
+            <div class="tab-pane fade" id="settings-tab-pane" role="tabpanel" aria-labelledby="settings-tab" tabindex="0">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">System Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Game Settings</h5>
+                                <form id="gameSettingsForm">
+                                    <div class="mb-3">
+                                        <label for="defaultBetAmount" class="form-label">Default Bet Amount</label>
+                                        <input type="number" class="form-control" id="defaultBetAmount" value="10" step="1">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="platformFee" class="form-label">Platform Fee (%)</label>
+                                        <input type="number" class="form-control" id="platformFee" value="5" min="0" max="20" step="0.1">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="cooldownSeconds" class="form-label">Command Cooldown (seconds)</label>
+                                        <input type="number" class="form-control" id="cooldownSeconds" value="5" min="0" max="60">
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>Transaction Settings</h5>
+                                <form id="transactionSettingsForm">
+                                    <div class="mb-3">
+                                        <label for="minDeposit" class="form-label">Minimum Deposit</label>
+                                        <input type="number" class="form-control" id="minDeposit" value="5" min="1" step="1">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="maxDeposit" class="form-label">Maximum Deposit</label>
+                                        <input type="number" class="form-control" id="maxDeposit" value="1000" min="10" step="10">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="minWithdraw" class="form-label">Minimum Withdrawal</label>
+                                        <input type="number" class="form-control" id="minWithdraw" value="10" min="1" step="1">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="maxWithdraw" class="form-label">Maximum Withdrawal</label>
+                                        <input type="number" class="form-control" id="maxWithdraw" value="500" min="10" step="10">
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <h5>Admin Access</h5>
+                                <div class="mb-3">
+                                    <label for="adminUserIds" class="form-label">Admin Telegram IDs (comma-separated)</label>
+                                    <textarea class="form-control" id="adminUserIds" rows="2"></textarea>
+                                    <div class="form-text">Enter Telegram user IDs that should have admin privileges (separated by commas)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <button class="btn btn-secondary me-md-2" type="button" id="resetSettingsBtn">Reset to Defaults</button>
+                            <button class="btn btn-primary" type="button" id="saveSettingsBtn">Save Settings</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmationTitle">Confirmation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="confirmationMessage">
+                    Are you sure you want to perform this action?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmActionBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container for Notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="adminActionToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong class="me-auto" id="toastTitle">Notification</strong>
+                <small>Just now</small>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastMessage">
+                Action completed successfully.
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="bi bi-joystick me-2"></i> RPS Arena</h5>
+                    <p>A Telegram bot game for Rock, Paper, Scissors with virtual betting.</p>
+                </div>
+                <div class="col-md-3">
+                    <h6>Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="/" class="text-decoration-none text-secondary">Home</a></li>
+                        <li><a href="/leaderboard" class="text-decoration-none text-secondary">Leaderboard</a></li>
+                        <li><a href="https://t.me/your_bot_username" class="text-decoration-none text-secondary">Play on Telegram</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Admin</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="/dashboard" class="text-decoration-none text-secondary">Dashboard</a></li>
+                        <li><a href="/admin" class="text-decoration-none text-secondary">Admin Panel</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="mt-4">
+            <div class="row">
+                <div class="col text-center">
+                    <p class="small text-muted mb-0">© 2023 RPS Arena. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap, Chart.js and custom scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.0.0/dist/chart.umd.min.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
