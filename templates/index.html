@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/css/custom.css">
+    <link rel="stylesheet" href="/static/css/animations.css">
 </head>
 <body>
     <!-- Navigation -->
@@ -48,10 +49,16 @@
                 </div>
             </div>
             <div class="col-md-6 text-center">
-                <div class="rps-icons mt-4 mt-md-0">
-                    <span class="display-1 mx-2">🗿</span>
-                    <span class="display-1 mx-2">📄</span>
-                    <span class="display-1 mx-2">✂️</span>
+                <div class="mt-4 mt-md-0">
+                    <!-- SVG Animation (like a GIF) -->
+                    <object data="/static/images/rps-animation.svg" type="image/svg+xml" class="img-fluid" style="max-width: 300px;"></object>
+                    
+                    <!-- CSS-based animation as fallback/additional -->
+                    <div class="d-none d-md-block mt-4">
+                        <span class="rps-choice rps-rock">🗿</span>
+                        <span class="rps-choice rps-paper">📄</span>
+                        <span class="rps-choice rps-scissors">✂️</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -191,6 +198,12 @@
     <!-- How to Play -->
     <div class="container my-5">
         <h2 class="text-center mb-4">How to Play</h2>
+        
+        <!-- Game Process Animation -->
+        <div class="text-center mb-5">
+            <object data="/static/images/game-animation.svg" type="image/svg+xml" class="img-fluid" style="max-width: 600px;"></object>
+        </div>
+        
         <div class="row g-4">
             <div class="col-md-3">
                 <div class="card h-100">

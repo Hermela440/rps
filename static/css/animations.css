@@ -1,0 +1,181 @@
+/* RPS Arena CSS Animations */
+
+/* Rock Paper Scissors Game Animation */
+@keyframes rpsChoiceAnimation {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.1) rotate(-5deg);
+  }
+  75% {
+    transform: scale(1.1) rotate(5deg);
+  }
+}
+
+.rps-choice {
+  display: inline-block;
+  font-size: 3rem;
+  margin: 0 10px;
+  animation: rpsChoiceAnimation 2s infinite;
+}
+
+.rps-rock {
+  animation-delay: 0s;
+}
+
+.rps-paper {
+  animation-delay: 0.66s;
+}
+
+.rps-scissors {
+  animation-delay: 1.33s;
+}
+
+/* Betting Animation */
+@keyframes betFlip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(180deg);
+  }
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+
+.coin-flip {
+  display: inline-block;
+  animation: betFlip 2s infinite;
+  transform-style: preserve-3d;
+}
+
+/* Win Animation */
+@keyframes winPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+  }
+}
+
+.win-pulse {
+  animation: winPulse 2s infinite;
+}
+
+/* Game card hover animation */
+.game-card {
+  transition: all 0.3s ease;
+}
+
+.game-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Countdown animation */
+@keyframes countdown {
+  0% {
+    transform: scale(2);
+    opacity: 0;
+  }
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+.countdown-number {
+  animation: countdown 1s forwards;
+}
+
+/* Trophy bounce animation */
+@keyframes trophyBounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-20px);
+  }
+  60% {
+    transform: translateY(-10px);
+  }
+}
+
+.trophy-bounce {
+  animation: trophyBounce 2s infinite;
+}
+
+/* Notification bell animation */
+@keyframes bellRing {
+  0%, 100% {
+    transform: rotate(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: rotate(10deg);
+  }
+  20%, 40%, 60%, 80% {
+    transform: rotate(-10deg);
+  }
+}
+
+.bell-ring {
+  display: inline-block;
+  animation: bellRing 2s infinite;
+  transform-origin: top center;
+}
+
+/* Rainbow text for jackpot */
+@keyframes rainbowText {
+  0% { color: #ff0000; }
+  14% { color: #ff7f00; }
+  28% { color: #ffff00; }
+  42% { color: #00ff00; }
+  57% { color: #0000ff; }
+  71% { color: #4b0082; }
+  85% { color: #9400d3; }
+  100% { color: #ff0000; }
+}
+
+.rainbow-text {
+  animation: rainbowText 5s infinite;
+}
+
+/* Loading spinner with RPS theme */
+@keyframes rpsLoading {
+  0% {
+    content: "🗿";
+  }
+  33% {
+    content: "📄";
+  }
+  66% {
+    content: "✂️";
+  }
+  100% {
+    content: "🗿";
+  }
+}
+
+.rps-loading::after {
+  content: "🗿";
+  animation: rpsLoading 1.5s infinite steps(1);
+  font-size: 2rem;
+  display: inline-block;
+}

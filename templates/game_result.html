@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Result - RPS Arena</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
+    <link rel="stylesheet" href="/static/css/animations.css">
+    <style>
+        .game-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .game-result {
+            background-color: rgba(52, 58, 64, 0.8);
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3);
+        }
+        
+        .player-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #495057;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin: 0 auto 1rem;
+            border: 3px solid transparent;
+        }
+        
+        .winner .player-avatar {
+            border-color: #ffc107;
+            animation: winPulse 2s infinite;
+        }
+        
+        .player-choice {
+            font-size: 3rem;
+            margin: 1rem 0;
+        }
+        
+        .vs-text {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #6c757d;
+        }
+        
+        .pot-amount {
+            font-size: 1.5rem;
+            padding: 0.5rem 1.5rem;
+            border-radius: 2rem;
+            background: linear-gradient(135deg, #17a2b8, #20c997);
+            display: inline-block;
+            margin: 1rem 0;
+        }
+        
+        .battle-animation-container {
+            margin: 2rem auto;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-joystick me-2"></i> RPS Arena
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/leaderboard">Leaderboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">Dashboard</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Game Result -->
+    <div class="container my-5">
+        <div class="game-container">
+            <h1 class="text-center mb-4">Game Results</h1>
+            <div class="game-result">
+                <div class="text-center mb-4">
+                    <h3>Game #{{ game.id }}</h3>
+                    <div class="pot-amount">
+                        <i class="bi bi-coin me-2"></i> Pot: ${{ "%.2f"|format(game.bet_amount * 3) }}
+                    </div>
+                </div>
+                
+                <!-- Battle Animation -->
+                <div class="battle-animation-container">
+                    <object data="/static/images/rps-battle-animation.svg" type="image/svg+xml" class="img-fluid"></object>
+                </div>
+                
+                <div class="row mt-5">
+                    {% for participant in game.participants %}
+                    <div class="col-md-4 text-center {% if participant.user_id == game.winner_id %}winner{% endif %}">
+                        <div class="player-avatar">
+                            <i class="bi bi-person-fill"></i>
+                        </div>
+                        <h5>{{ participant.user.username }}</h5>
+                        <div class="player-choice">
+                            {% if participant.choice == 'rock' %}
+                            🗿
+                            {% elif participant.choice == 'paper' %}
+                            📄
+                            {% elif participant.choice == 'scissors' %}
+                            ✂️
+                            {% endif %}
+                        </div>
+                        <p class="mb-1">{{ participant.choice|capitalize }}</p>
+                        {% if participant.user_id == game.winner_id %}
+                        <span class="badge bg-success trophy-bounce">Winner! <i class="bi bi-trophy ms-1"></i></span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="text-center mt-5">
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <div class="alert bg-dark">
+                                <p class="mb-0">
+                                    {% if game.winner %}
+                                    <strong>{{ game.winner.username }}</strong> won and received 
+                                    <strong>${{ "%.2f"|format(game.bet_amount * 3 * 0.95) }}</strong> 
+                                    (5% platform fee: ${{ "%.2f"|format(game.bet_amount * 3 * 0.05) }})
+                                    {% else %}
+                                    Game ended in a draw!
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="/" class="btn btn-outline-primary me-2">
+                            <i class="bi bi-house-door me-1"></i> Home
+                        </a>
+                        <a href="/dashboard" class="btn btn-primary">
+                            <i class="bi bi-controller me-1"></i> Play Again
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="bi bi-joystick me-2"></i> RPS Arena</h5>
+                    <p>A Telegram bot game for Rock, Paper, Scissors with virtual betting.</p>
+                </div>
+                <div class="col-md-3">
+                    <h6>Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="/" class="text-decoration-none text-secondary">Home</a></li>
+                        <li><a href="/leaderboard" class="text-decoration-none text-secondary">Leaderboard</a></li>
+                        <li><a href="https://t.me/your_bot_username" class="text-decoration-none text-secondary">Play on Telegram</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Resources</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-decoration-none text-secondary">Help</a></li>
+                        <li><a href="#" class="text-decoration-none text-secondary">FAQ</a></li>
+                        <li><a href="#" class="text-decoration-none text-secondary">Contact Us</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="mt-4">
+            <div class="row">
+                <div class="col text-center">
+                    <p class="small text-muted mb-0">© 2023 RPS Arena. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap and custom scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="300" height="200" viewBox="0 0 300 200">
+  <style>
+    @keyframes rockAnimation {
+      0% { transform: translateX(0) rotate(0deg); opacity: 0; }
+      10% { transform: translateX(0) rotate(0deg); opacity: 1; }
+      30% { transform: translateX(0) rotate(0deg); opacity: 1; }
+      40% { transform: translateX(-100px) rotate(-10deg); opacity: 0; }
+      100% { transform: translateX(-100px) rotate(-10deg); opacity: 0; }
+    }
+    @keyframes paperAnimation {
+      0% { transform: translateX(0) rotate(0deg); opacity: 0; }
+      30% { transform: translateX(0) rotate(0deg); opacity: 0; }
+      40% { transform: translateX(0) rotate(0deg); opacity: 1; }
+      60% { transform: translateX(0) rotate(0deg); opacity: 1; }
+      70% { transform: translateX(-100px) rotate(-10deg); opacity: 0; }
+      100% { transform: translateX(-100px) rotate(-10deg); opacity: 0; }
+    }
+    @keyframes scissorsAnimation {
+      0% { transform: translateX(0) rotate(0deg); opacity: 0; }
+      60% { transform: translateX(0) rotate(0deg); opacity: 0; }
+      70% { transform: translateX(0) rotate(0deg); opacity: 1; }
+      90% { transform: translateX(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateX(-100px) rotate(-10deg); opacity: 0; }
+    }
+    @keyframes handShake {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(10px); }
+    }
+    .hand-container {
+      animation: handShake 1s infinite;
+    }
+    .rock {
+      animation: rockAnimation 6s infinite;
+    }
+    .paper {
+      animation: paperAnimation 6s infinite;
+    }
+    .scissors {
+      animation: scissorsAnimation 6s infinite;
+    }
+    .vs {
+      font-family: Arial, sans-serif;
+      font-weight: bold;
+      fill: #f8f9fa;
+      font-size: 24px;
+    }
+    .glow {
+      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.7));
+    }
+  </style>
+  
+  <g class="hand-container" transform="translate(150, 100)">
+    <!-- Rock -->
+    <g class="rock glow">
+      <circle cx="0" cy="0" r="40" fill="#6c757d" />
+      <text x="0" y="10" text-anchor="middle" fill="#ffffff" font-family="Arial" font-size="40">🗿</text>
+    </g>
+    
+    <!-- Paper -->
+    <g class="paper glow">
+      <rect x="-35" y="-35" width="70" height="70" rx="10" fill="#f8f9fa" />
+      <text x="0" y="10" text-anchor="middle" fill="#212529" font-family="Arial" font-size="40">📄</text>
+    </g>
+    
+    <!-- Scissors -->
+    <g class="scissors glow">
+      <path d="M-30,-30 L30,30 M-30,30 L30,-30" stroke="#dc3545" stroke-width="10" stroke-linecap="round" />
+      <text x="0" y="10" text-anchor="middle" fill="#ffffff" font-family="Arial" font-size="40">✂️</text>
+    </g>
+  </g>
+  
+  <!-- VS text on both sides -->
+  <text x="75" y="100" class="vs glow" text-anchor="middle">VS</text>
+  <text x="225" y="100" class="vs glow" text-anchor="middle">VS</text>
+  
+  <!-- Border with glow effect -->
+  <rect x="5" y="5" width="290" height="190" rx="15" fill="none" stroke="#6610f2" stroke-width="3" class="glow" />
+</svg>
