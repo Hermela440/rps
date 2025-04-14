@@ -282,9 +282,51 @@ async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if amount <= 0:
             await update.message.reply_text("Deposit amount must be greater than zero.")
             return
+            
+        from config import MIN_DEPOSIT_AMOUNT, MAX_DEPOSIT_AMOUNT
         
-        success, message = PaymentSystem.deposit(user.id, amount)
-        await update.message.reply_text(message)
+        # Check min/max limits
+        if amount < MIN_DEPOSIT_AMOUNT:
+            await update.message.reply_text(f"Minimum deposit amount is ${MIN_DEPOSIT_AMOUNT}.")
+            return
+            
+        if amount > MAX_DEPOSIT_AMOUNT:
+            await update.message.reply_text(f"Maximum deposit amount is ${MAX_DEPOSIT_AMOUNT}.")
+            return
+        
+        # Generate payment link with Capa Wallet
+        success, result = PaymentSystem.deposit(user.id, amount)
+        
+        if not success:
+            # If result is a string, it's an error message
+            if isinstance(result, str):
+                await update.message.reply_text(f"Error: {result}")
+            else:
+                await update.message.reply_text("Payment service temporarily unavailable. Please try again later.")
+            return
+            
+        # If result is a dictionary, it has payment info
+        if isinstance(result, dict):
+            payment_url = result.get('payment_url', '')
+            message = result.get('message', f"Please complete your payment of ${amount:.2f} using Capa Wallet")
+            
+            # Create payment button
+            if payment_url:
+                keyboard = [[InlineKeyboardButton("Pay Now", url=payment_url)]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    f"💰 *Deposit Funds*\n\n"
+                    f"{message}\n\n"
+                    f"Amount: ${amount:.2f}\n"
+                    f"Click the button below to complete your payment.",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(f"{message}")
+        else:
+            await update.message.reply_text(f"{result}")
         
     except ValueError:
         await update.message.reply_text("Invalid amount. Please enter a valid number.")
@@ -333,9 +375,65 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if amount <= 0:
             await update.message.reply_text("Withdrawal amount must be greater than zero.")
             return
+            
+        from config import MIN_WITHDRAW_AMOUNT, MAX_WITHDRAW_AMOUNT
         
-        success, message = PaymentSystem.request_withdrawal(user.id, amount)
-        await update.message.reply_text(message)
+        # Check min/max limits
+        if amount < MIN_WITHDRAW_AMOUNT:
+            await update.message.reply_text(f"Minimum withdrawal amount is ${MIN_WITHDRAW_AMOUNT}.")
+            return
+            
+        if amount > MAX_WITHDRAW_AMOUNT:
+            await update.message.reply_text(f"Maximum withdrawal amount is ${MAX_WITHDRAW_AMOUNT}.")
+            return
+            
+        # Check if user has enough balance
+        if user.balance < amount:
+            await update.message.reply_text(f"Insufficient balance. You have ${user.balance:.2f}.")
+            return
+            
+        # Ask for wallet address
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_withdrawal")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Store the withdrawal amount in context.user_data
+        if not hasattr(context, 'user_data'):
+            context.user_data = {}
+        context.user_data['withdrawal_amount'] = amount
+        
+        await update.message.reply_text(
+            "Please enter your Capa Wallet address to receive the funds.\n"
+            "Reply directly with your wallet address or click Cancel.",
+            reply_markup=reply_markup
+        )
+        
+        # In a real implementation, we would await the user's wallet address input
+        # For now, we'll use a placeholder address for demonstration
+        # This is where we would register a conversation handler in a production bot
+        wallet_address = "capa_wallet_address_placeholder"
+        
+        # Process withdrawal request
+        success, result = PaymentSystem.request_withdrawal(user.id, amount)
+        
+        if not success:
+            # If result is a string, it's an error message
+            if isinstance(result, str):
+                await update.message.reply_text(f"Error: {result}")
+            else:
+                await update.message.reply_text("Payment service temporarily unavailable. Please try again later.")
+            return
+            
+        # If result is a dictionary, it has withdrawal info
+        if isinstance(result, dict):
+            message = result.get('message', f"Withdrawal request for ${amount:.2f} has been submitted and is awaiting approval.")
+            await update.message.reply_text(
+                f"💸 *Withdrawal Request*\n\n"
+                f"{message}\n\n"
+                f"You will be notified once your withdrawal is processed.",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(f"{result}")
         
     except ValueError:
         await update.message.reply_text("Invalid amount. Please enter a valid number.")
