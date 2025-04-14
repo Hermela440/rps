@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -10,6 +10,8 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
+# Import Update from telegram.ext rather than telegram
+from telegram.ext import Update
 from datetime import datetime
 
 from app import db
