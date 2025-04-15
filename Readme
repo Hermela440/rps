@@ -1,0 +1,53 @@
+# Create a virtual environment (Python 3.11 or higher required)
+python -m venv venv
+
+# Activate the virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install all required packages
+pip install "python-telegram-bot[all]==20.7" flask flask-sqlalchemy gunicorn psycopg2-binary requests sqlalchemy telegram werkzeug email-validator
+
+# Run the entire application
+python main.py
+Start the Bot
+Open Telegram
+Search for your bot
+Click "Start" or type /start to begin
+Available Commands
+Here are the main commands you can use:
+Account Commands 🔐
+/create_account - Create your account (first step!)
+/balance - Check your wallet balance
+/deposit - Add funds to your wallet
+/withdraw - Withdraw funds
+/delete_account - Delete your account
+/history - View your game history
+Game Commands 🎮
+/join_game - Join a match with default bet ($10)
+/join_game [amount] - Join with custom bet amount
+/game_status - Check current game status
+Stats Commands 📊
+/leaderboard - View top players
+/profile - View your stats
+Help Commands ℹ️
+/help - Show all available commands
+/about - Learn about the bot
+Getting Started
+Send /start to the bot
+Create an account using /create_account [username]
+You'll receive a welcome bonus of $100
+Use /join_game to start playing!
+Playing the Game
+When you join a game, you'll wait for other players (needs 3 players total)
+Once 3 players join, you'll get buttons to choose:
+🗿 Rock
+📄 Paper
+✂️ Scissors
+Make your choice and wait for results!
+The bot should be running if you started the application with python main.py. If you're having trouble connecting to the bot, make sure:
+The application is running without errors
+You're using the correct bot on Telegram
+The bot token in config.py is correct

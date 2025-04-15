@@ -63,9 +63,9 @@ class CapaWallet:
                 "metadata": {
                     "user_id": user_id
                 },
-                "redirect_url": "https://rps-arena.replit.app/payment/success",
-                "cancel_url": "https://rps-arena.replit.app/payment/cancel",
-                "webhook_url": "https://rps-arena.replit.app/api/payment/webhook"
+                "redirect_url": config.PAYMENT_SUCCESS_URL,
+                "cancel_url": config.PAYMENT_CANCEL_URL,
+                "webhook_url": config.PAYMENT_WEBHOOK_URL
             }
             
             response = requests.post(

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from app import db
 from models import User, Game, GameParticipant, Transaction
 from config import BET_AMOUNT_DEFAULT, PLATFORM_FEE_PERCENT, LOGGER
@@ -27,61 +27,68 @@ class RPSGame:
     @staticmethod
     def join_game(game_id, user_id):
         """Add a user to a game"""
-        # Check if user is already in this game
-        existing = GameParticipant.query.filter_by(
-            game_id=game_id,
-            user_id=user_id
-        ).first()
-        
-        if existing:
-            return False, "You have already joined this game."
-        
-        # Check if game is full
-        game = Game.query.get(game_id)
-        if not game:
-            return False, "Game not found."
-        
-        if game.status != 'waiting':
-            return False, "This game has already started or has ended."
-        
-        participant_count = GameParticipant.query.filter_by(game_id=game_id).count()
-        if participant_count >= 3:
-            return False, "This game is already full."
-        
-        # Check if user has enough balance
-        user = User.query.get(user_id)
-        if user.balance < game.bet_amount:
-            return False, f"You don't have enough balance. Required: {game.bet_amount}, Your balance: {user.balance}"
-        
-        # Deduct bet amount from user balance
-        user.balance -= game.bet_amount
-        
-        # Create transaction record
-        transaction = Transaction(
-            user_id=user_id,
-            amount=-game.bet_amount,
-            transaction_type='bet',
-            status='completed',
-            reference_id=str(game_id),
-            completed_at=datetime.utcnow()
-        )
-        db.session.add(transaction)
-        
-        # Add user to game
-        participant = GameParticipant(
-            game_id=game_id,
-            user_id=user_id
-        )
-        db.session.add(participant)
-        
-        # Check if game is full after adding this player
-        new_count = participant_count + 1
-        if new_count >= 3:
-            game.status = 'active'
-        
-        db.session.commit()
-        
-        return True, "You have successfully joined the game."
+        try:
+            # Use session locking to prevent race conditions
+            game = db.session.query(Game).filter_by(id=game_id).with_for_update().first()
+            
+            # Check if user is already in this game
+            existing = GameParticipant.query.filter_by(
+                game_id=game_id,
+                user_id=user_id
+            ).first()
+            
+            if existing:
+                return False, "You have already joined this game."
+            
+            # Check if game is full
+            if not game:
+                return False, "Game not found."
+            
+            if game.status != 'waiting':
+                return False, "This game has already started or has ended."
+            
+            participant_count = GameParticipant.query.filter_by(game_id=game_id).count()
+            if participant_count >= 3:
+                return False, "This game is already full."
+            
+            # Check if user has enough balance
+            user = User.query.get(user_id)
+            if user.balance < game.bet_amount:
+                return False, f"You don't have enough balance. Required: {game.bet_amount}, Your balance: {user.balance}"
+            
+            # Deduct bet amount from user balance
+            user.balance -= game.bet_amount
+            
+            # Create transaction record
+            transaction = Transaction(
+                user_id=user_id,
+                amount=-game.bet_amount,
+                transaction_type='bet',
+                status='completed',
+                reference_id=str(game_id),
+                completed_at=datetime.utcnow()
+            )
+            db.session.add(transaction)
+            
+            # Add user to game
+            participant = GameParticipant(
+                game_id=game_id,
+                user_id=user_id
+            )
+            db.session.add(participant)
+            
+            # Check if game is full after adding this player
+            new_count = participant_count + 1
+            if new_count >= 3:
+                game.status = 'active'
+            
+            db.session.commit()
+            
+            return True, "You have successfully joined the game."
+        except Exception as e:
+            db.session.rollback()
+            LOGGER.error(f"Error joining game: {e}")
+            return False, "Could not join the game. Please try again."
     
     @staticmethod
     def make_choice(game_id, user_id, choice):
@@ -258,3 +265,118 @@ class RPSGame:
             'participants': participant_details,
             'winner_id': game.winner_id
         }
+    
+    @staticmethod
+    def clean_stale_games(max_age_minutes=30):
+        """Clean up games that have been waiting too long"""
+        from datetime import datetime, timedelta
+        cutoff_time = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        
+        stale_games = Game.query.filter(
+            Game.status == 'waiting',
+            Game.created_at < cutoff_time
+        ).all()
+        
+        for game in stale_games:
+            # Refund all participants
+            for participant in game.participants:
+                user = User.query.get(participant.user_id)
+                if user:
+                    user.balance += game.bet_amount
+                    
+                    # Create refund transaction
+                    transaction = Transaction(
+                        user_id=user.id,
+                        amount=game.bet_amount,
+                        transaction_type='refund',
+                        status='completed',
+                        reference_id=f"timeout_{game.id}",
+                        completed_at=datetime.utcnow()
+                    )
+                    db.session.add(transaction)
+            
+            # Mark game as cancelled
+            game.status = 'cancelled'
+            game.completed_at = datetime.utcnow()
+        
+        db.session.commit()
+        return len(stale_games)
+    
+    @staticmethod
+    def check_for_waiting_games(minimum_wait_minutes=5):
+        """Check for games that have been waiting for a while and might need to start with fewer players"""
+        from datetime import datetime, timedelta
+        cutoff_time = datetime.utcnow() - timedelta(minutes=minimum_wait_minutes)
+        
+        # Find games with exactly 2 players waiting for a while
+        waiting_games = db.session.query(Game).filter(
+            Game.status == 'waiting',
+            Game.created_at < cutoff_time
+        ).all()
+        
+        for game in waiting_games:
+            participant_count = GameParticipant.query.filter_by(game_id=game.id).count()
+            
+            # If we have exactly 2 players waiting for at least 5 minutes, start the game
+            if participant_count == 2:
+                game.status = 'active'
+                db.session.commit()
+                
+                # Return the game ID so we can notify players
+                return game.id
+        
+        return None
+
+    @staticmethod
+    def find_or_create_game(user_id, bet_amount=BET_AMOUNT_DEFAULT):
+        """Find an existing game or create a new one with proper locking to avoid race conditions"""
+        user = User.query.get(user_id)
+        if not user:
+            return None, "User not found."
+        
+        if user.balance < bet_amount:
+            return None, f"Insufficient balance. You need ${bet_amount:.2f} to play."
+        
+        try:
+            # First try to find an existing game with the same bet amount
+            available_games = Game.query.filter_by(status='waiting', bet_amount=bet_amount).all()
+            
+            # Find games that aren't full
+            joinable_games = []
+            for game in available_games:
+                # Count participants with a separate query to avoid race conditions
+                participant_count = db.session.query(func.count(GameParticipant.id)).filter_by(game_id=game.id).scalar()
+                if participant_count < 3:
+                    joinable_games.append((game, participant_count))
+            
+            if joinable_games:
+                # Sort by most filled games first to fill games faster
+                joinable_games.sort(key=lambda x: x[1], reverse=True)
+                return joinable_games[0][0], "Found existing game"
+            
+            # If no game with matching bet, try any game the user can afford
+            if bet_amount == BET_AMOUNT_DEFAULT:  # Only auto-join if user is using default bet
+                available_games = Game.query.filter(
+                    Game.status == 'waiting',
+                    Game.bet_amount <= user.balance
+                ).all()
+                
+                joinable_games = []
+                for game in available_games:
+                    participant_count = db.session.query(func.count(GameParticipant.id)).filter_by(game_id=game.id).scalar()
+                    if participant_count < 3:
+                        joinable_games.append((game, participant_count))
+                
+                if joinable_games:
+                    # Sort by most filled games first
+                    joinable_games.sort(key=lambda x: x[1], reverse=True)
+                    return joinable_games[0][0], "Found existing game with different bet"
+            
+            # No suitable game found, create a new one
+            new_game = RPSGame.create_game(bet_amount)
+            return new_game, "Created new game"
+        
+        except Exception as e:
+            db.session.rollback()
+            LOGGER.error(f"Error finding/creating game: {e}")
+            return None, "Error finding or creating game. Please try again."

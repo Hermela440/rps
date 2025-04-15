@@ -1,40 +1,31 @@
+from flask import Flask
+from extensions import db
+from routes import register_routes
 import os
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
-from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.security import generate_password_hash, check_password_hash
-import logging
+from config import DATABASE_URL, DEBUG, LOGGER
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+def create_app():
+    app = Flask(__name__)
+    
+    # Use DATABASE_URL from config
+    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SECRET_KEY'] = os.environ.get('SESSION_SECRET', 'dev-secret-key')
+    app.config['DEBUG'] = DEBUG
+    
+    db.init_app(app)
 
-class Base(DeclarativeBase):
-    pass
-
-# Initialize Flask app and SQLAlchemy
-db = SQLAlchemy(model_class=Base)
-app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-# Configure database
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///rps_game.db")
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,
-    "pool_pre_ping": True,
-}
-db.init_app(app)
-
-# Import routes after app initialization to avoid circular imports
-with app.app_context():
-    # Import models
-    import models
-    db.create_all()
-
-    # Import routes after db initialization
-    from routes import register_routes
+    # Register routes
     register_routes(app)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    return app
+
+app = create_app()
+
+# Create tables if they don't exist
+with app.app_context():
+    db.create_all()
+    LOGGER.info("Database tables created/verified")
+
+if __name__ == '__main__':
+    app.run(debug=DEBUG)
