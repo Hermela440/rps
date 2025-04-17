@@ -1,21 +1,26 @@
-# RPS Arena Bot
+# Rock Paper Scissors Telegram Bot
 
-A Telegram bot for playing Rock-Paper-Scissors with virtual betting.
-
-## Setup Instructions
-
-1. Install Python 3.7 or higher
-2. Clone this repository
-3. Run the setup script: 
-```
+A Telegram bot for playing Rock Paper Scissors with betting functionality.
 
 ## Features
 
-- Play Rock-Paper-Scissors with 3 players
-- Virtual wallet system with mock payments
-- Betting on matches
+- Play Rock Paper Scissors with other users
+- Virtual wallet system
+- Deposit and withdraw funds
 - Leaderboard and statistics
-- Admin dashboard
+- Admin panel for managing users and transactions
+
+## Setup
+
+1. Clone the repository
+2. Install requirements: `pip install -r requirements.txt`
+3. Create `.env` file with your configuration
+4. Initialize database: `python init_db.py`
+5. Run the bot: `python main.py`
+
+## Environment Variables
+
+Create a `.env` file with the following variables:
 
 ## Bot Commands
 
