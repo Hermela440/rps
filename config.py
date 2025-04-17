@@ -4,21 +4,26 @@ Configuration settings for the RPS Arena application
 
 import os
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 LOGGER = logging.getLogger(__name__)
 
 # Game settings
-BET_AMOUNT_DEFAULT = 10  # Default bet amount for games
-MAX_PLAYERS_PER_GAME = 3  # Number of players in a game
-PLATFORM_FEE_PERCENT = 5  # Platform fee percentage for game winnings
+BET_AMOUNT_DEFAULT = 10.0
+MIN_BET_AMOUNT = 1.0
+MAX_BET_AMOUNT = 1000.0
+PLATFORM_FEE_PERCENT = 5.0
 
 # Payment settings
-MIN_DEPOSIT_AMOUNT = 10  # Minimum deposit amount
-MAX_DEPOSIT_AMOUNT = 1000  # Maximum deposit amount
-MIN_WITHDRAW_AMOUNT = 20  # Minimum withdrawal amount
-MAX_WITHDRAW_AMOUNT = 1000  # Maximum withdrawal amount
+MIN_DEPOSIT_AMOUNT = 10.0
+MAX_DEPOSIT_AMOUNT = 1000.0
+MIN_WITHDRAW_AMOUNT = 20.0
+MAX_WITHDRAW_AMOUNT = 500.0
 
 # Cooldown settings (in seconds) - reduced for better testing
 CREATE_ACCOUNT_COOLDOWN = 10  # Was 86400 (24 hours)
@@ -28,10 +33,10 @@ WITHDRAW_COOLDOWN = 10  # Was 3600 (1 hour)
 JOIN_GAME_COOLDOWN = 10  # Was 60 (1 minute)
 
 # Telegram Bot settings
-BOT_TOKEN = "7832695308:AAHlQ3bXJT5rbIeP8OzoujBB2M9ZZBuEB-U"
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Add all admin users - update with actual Telegram IDs
-ADMIN_USERS = []  # Empty by default, add IDs manually
+ADMIN_USERS = [1418773713]  # Your admin ID is directly included
 
 # Application URLs
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000")
@@ -40,7 +45,7 @@ PAYMENT_CANCEL_URL = f"{BASE_URL}/payment/cancel"
 PAYMENT_WEBHOOK_URL = f"{BASE_URL}/api/payment/webhook"
 
 # Database settings
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///rps_game.db")
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///rps_bot.db')
 
 # Debug mode
 DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
@@ -58,3 +63,11 @@ CAPA_SECRET_KEY = os.environ.get("CAPA_SECRET_KEY", "")
 
 if not CAPA_API_KEY or not CAPA_SECRET_KEY:
     LOGGER.warning("Capa Wallet API keys not configured. Using mock payment system.")
+
+# Chapa API settings
+CHAPA_API_KEY = "CHASECK_TEST-WQATsMezrNPxr8bsVH1TAGwAfDBofhqq"
+CHAPA_API_URL = os.getenv('CHAPA_API_URL', 'https://api.chapa.co/v1')
+CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY')
+
+# Logging Configuration
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

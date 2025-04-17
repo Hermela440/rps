@@ -1,21 +1,21 @@
-import asyncio
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, Update
 from telegram.ext import (
-    Application,
+    Updater,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    filters,
-    ContextTypes
+    CallbackContext,
+    filters
 )
-from rps_simulation import create_rps_simulation
-# Import Update from telegram
-from telegram import Update
+from rps_simulation import simulate_game, process_simulation_result
 from datetime import datetime
+import os
+import random
+from decimal import Decimal
 
 from app import db
-from models import User, Game, GameParticipant, Transaction
+from models import User, Game, GameParticipant, Transaction, WithdrawalRequest
 from game import RPSGame
 from payments import PaymentSystem
 from utils import (
@@ -29,18 +29,127 @@ from utils import (
     validate_username
 )
 from admin import AdminService
-from config import BOT_TOKEN, ADMIN_USERS, LOGGER, BET_AMOUNT_DEFAULT
+from config import (
+    BOT_TOKEN,
+    ADMIN_USERS,
+    LOGGER,
+    BET_AMOUNT_DEFAULT,
+    MIN_DEPOSIT_AMOUNT,
+    MAX_DEPOSIT_AMOUNT,
+    MIN_WITHDRAW_AMOUNT,
+    MAX_WITHDRAW_AMOUNT
+)
+
+# Platform fee percentage for game winnings
+PLATFORM_FEE_PERCENT = 5.0
+
 @cooldown()
-async def create_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... existing code ...
+async def create_account(update: Update, context: CallbackContext) -> None:
+    """Create a new user account."""
+    try:
+        telegram_id = update.effective_user.id
+        telegram_username = update.effective_user.username
+        
+        # Log the request
+        LOGGER.info(f"Account creation request from Telegram ID: {telegram_id}, Username: {telegram_username}")
     
-    # Fix: Remove parse_mode=Markdown or escape $ symbols
-    await update.message.reply_text(
-        f"Account created successfully! Welcome, {username}.\n"
-        f"You've received a welcome bonus of $100.00 in your wallet.\n"
-        f"Your current balance: ${user.balance:.2f}\n\n"
-        f"Use /join_game to start playing!"
-    )  # Remove parse_mode='Markdown'
+        # Check if user already exists
+        existing_user = get_user_by_telegram_id(telegram_id)
+        if existing_user:
+            update.message.reply_text("You already have an account.")
+            return
+        
+        # Get username from message or use Telegram username
+        if context.args and len(context.args) > 0:
+            username = context.args[0]
+            LOGGER.info(f"Provided username: {username}")
+        else:
+            # Use Telegram username if available
+            if telegram_username:
+                username = telegram_username
+                LOGGER.info(f"Using Telegram username: {username}")
+            else:
+                update.message.reply_text(
+                    "Please provide a username: /create_account [username]"
+                )
+                return
+        
+        # Simple username validation (3-32 chars, alphanumeric, underscores, hyphens)
+        if len(username) < 3 or len(username) > 32:
+            update.message.reply_text(
+                f"Username '{username}' must be between 3 and 32 characters."
+            )
+            return
+            
+        # Simplified validation to avoid regex issues
+        valid_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+        if not all(c in valid_chars for c in username):
+            update.message.reply_text(
+                f"Username '{username}' contains invalid characters. "
+                "Only letters, numbers, underscores, and hyphens are allowed."
+            )
+            return
+        
+        # Check if username is already taken (with error handling)
+        try:
+            existing_name = User.query.filter_by(username=username).first()
+            if existing_name:
+                update.message.reply_text(f"Username '{username}' is already taken. Please try another one.")
+                return
+        except Exception as e:
+            LOGGER.error(f"Database error checking username: {e}")
+            update.message.reply_text("Error checking username availability. Please try again later.")
+            return
+        
+        # Create new user with error handling
+        try:
+            # Create user
+            user = User(
+                telegram_id=telegram_id,
+                username=username,
+                balance=100.0,  # Starting balance
+                created_at=datetime.utcnow(),
+                last_active=datetime.utcnow(),
+                is_admin=telegram_id in ADMIN_USERS  # Set admin status if in admin list
+            )
+            
+            db.session.add(user)
+            db.session.commit()
+            
+            # Get user ID after commit
+            user_id = user.id
+    
+            # Create initial bonus transaction
+            transaction = Transaction(
+                user_id=user_id,
+                amount=100.0,
+                transaction_type='bonus',
+                status='completed',
+                reference_id='welcome_bonus',
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            )
+            db.session.add(transaction)
+            db.session.commit()
+            
+            LOGGER.info(f"Account created successfully for {username} (ID: {user_id})")
+            
+            # Success message - without Markdown to avoid $ parsing issues
+            update.message.reply_text(
+                f"Account created successfully! Welcome, {username}.\n"
+                f"You've received a welcome bonus of $100.00 in your wallet.\n"
+                f"Your current balance: ${user.balance:.2f}\n\n"
+                f"Use /join_game to start playing!"
+            )
+
+        except Exception as e:
+            LOGGER.error(f"Error creating account: {e}")
+            db.session.rollback()
+            update.message.reply_text("Error creating account. Please try again later.")
+
+    except Exception as e:
+        LOGGER.error(f"Unexpected error in create_account: {e}")
+        update.message.reply_text("An unexpected error occurred. Please try again.")
 
 def escape_markdown(text):
     """
@@ -89,11 +198,9 @@ COMMANDS = {
     "🎮 Game Commands": {
         "/join_game": "Join a match with default bet",
         "/join_game [amount]": "Join a match with custom bet",
-        "/game_status": "Check status of current game"
-    ,
-        "/replay": "Replay a game animation with GIFs"
-    ,
-        "/simulate": "Run Rock-Paper-Scissors simulation"
+        "/game_status": "Check status of current game",
+        "/simulate": "Watch RPS battle simulation",
+        "/simulate [rock] [paper] [scissors]": "Custom simulation with specific counts"
     },
     "📊 Stats Commands": {
         "/leaderboard": "View top players",
@@ -101,7 +208,7 @@ COMMANDS = {
     },
     "ℹ️ Help Commands": {
         "/help": "Show this help message",
-        "/about": "About the RPS Arena bot"
+        "/about": "About the Rock Paper Scissors bot"
     }
 }
 
@@ -124,9 +231,8 @@ GAME_CHOICES = InlineKeyboardMarkup([
 
 
 # Command handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, context: CallbackContext) -> None:
     """Send a welcome message when the command /start is issued."""
-    # Create a keyboard with command categories
     keyboard = [
         [KeyboardButton("💰 Account"), KeyboardButton("🎮 Game")],
         [KeyboardButton("📊 Stats"), KeyboardButton("ℹ️ Help")]
@@ -134,30 +240,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
     await update.message.reply_text(
-        "Welcome to RPS Arena Bot! Choose a command category or use / to see all commands:",
+        "Welcome to Rock Paper Scissors! Choose a command category or use / to see all commands:",
         reply_markup=reply_markup
     )
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a help message when the command /help is issued."""
-    help_text = "📚 *RPS Arena Bot Commands* 📚\n\n"
-    
-    for category, commands in COMMANDS.items():
-        help_text += f"*{category}*\n"
-        for cmd, desc in commands.items():
-            help_text += f"{cmd} - {desc}\n"
-        help_text += "\n"
-    
-    # Add admin commands if user is admin
-    user = get_user_by_telegram_id(update.effective_user.id)
-    if user and user.is_admin:
-        help_text += "*🔑 Admin Commands*\n"
-        for cmd, desc in ADMIN_COMMANDS.items():
-            help_text += f"{cmd} - {desc}\n"
+
+async def help_command(update: Update, context: CallbackContext) -> None:
+    """Send a message when the command /help is issued."""
+    help_text = (
+        "🎮 *RPS Arena Bot Commands*\n\n"
+        "*Game Commands:*\n"
+        "/join_game [amount] - Join or create a game with optional bet amount\n"
+        "/game_status - Check your current game status\n"
+        "/simulate [amount] - Play against AI bots (default bet: ETB 10)\n\n"
+        "*Account Commands:*\n"
+        "/create_account - Create a new account\n"
+        "/balance - Check your balance\n"
+        "/deposit - Deposit funds\n"
+        "/withdraw - Withdraw funds\n"
+        "/history - View transaction history\n"
+        "/delete_account - Delete your account\n\n"
+        "*Stats Commands:*\n"
+        "/profile - View your profile\n"
+        "/leaderboard - View top players\n\n"
+        "*Other Commands:*\n"
+        "/about - About this bot\n"
+        "/help - Show this help message"
+    )
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 
-async def about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def about(update: Update, context: CallbackContext) -> None:
     """Send information about the bot."""
     await update.message.reply_text(
         "📱 *RPS Arena Bot* 📱\n\n"
@@ -173,113 +286,7 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @cooldown()
-async def create_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Create a new user account."""
-    try:
-        telegram_id = update.effective_user.id
-        telegram_username = update.effective_user.username
-        
-        # Log the request
-        LOGGER.info(f"Account creation request from Telegram ID: {telegram_id}, Username: {telegram_username}")
-        
-        # Check if user already exists
-        existing_user = get_user_by_telegram_id(telegram_id)
-        if existing_user:
-            await update.message.reply_text("You already have an account.")
-            return
-        
-        # Get username from message or use Telegram username
-        if context.args and len(context.args) > 0:
-            username = context.args[0]
-            LOGGER.info(f"Provided username: {username}")
-        else:
-            # Use Telegram username if available
-            if telegram_username:
-                username = telegram_username
-                LOGGER.info(f"Using Telegram username: {username}")
-            else:
-                await update.message.reply_text(
-                    "Please provide a username: /create_account [username]"
-                )
-                return
-        
-        # Simple username validation (3-32 chars, alphanumeric, underscores, hyphens)
-        if len(username) < 3 or len(username) > 32:
-            await update.message.reply_text(
-                f"Username '{username}' must be between 3 and 32 characters."
-            )
-            return
-            
-        # Simplified validation to avoid regex issues
-        valid_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
-        if not all(c in valid_chars for c in username):
-            await update.message.reply_text(
-                f"Username '{username}' contains invalid characters. "
-                "Only letters, numbers, underscores, and hyphens are allowed."
-            )
-            return
-        
-        # Check if username is already taken (with error handling)
-        try:
-            existing_name = User.query.filter_by(username=username).first()
-            if existing_name:
-                await update.message.reply_text(f"Username '{username}' is already taken. Please try another one.")
-                return
-        except Exception as e:
-            LOGGER.error(f"Database error checking username: {e}")
-            await update.message.reply_text("Error checking username availability. Please try again later.")
-            return
-        
-        # Create new user with error handling
-        try:
-            # Create user
-            user = User(
-                telegram_id=telegram_id,
-                username=username,
-                balance=100.0,  # Starting balance
-                created_at=datetime.utcnow(),
-                last_active=datetime.utcnow(),
-                is_admin=telegram_id in ADMIN_USERS  # Set admin status if in admin list
-            )
-            
-            db.session.add(user)
-            db.session.commit()
-            
-            # Get user ID after commit
-            user_id = user.id
-            
-            # Create initial bonus transaction
-            transaction = Transaction(
-                user_id=user_id,
-                amount=100.0,
-                transaction_type='bonus',
-                status='completed',
-                reference_id='welcome_bonus',
-                created_at=datetime.utcnow(),
-                completed_at=datetime.utcnow()
-            )
-            db.session.add(transaction)
-            db.session.commit()
-            
-            LOGGER.info(f"Account created successfully for {username} (ID: {user_id})")
-            
-            # Success message - without Markdown to avoid $ parsing issues
-            await update.message.reply_text(
-               f"Account created successfully! Welcome, {username}."
-                f"You've received a welcome bonus of $100.00 in your wallet.\n"
-                f"Your current balance: ${user.balance:.2f}\n\n"
-                f"Use /join_game to start playing!"
-            )
-            
-        except Exception as e:
-            LOGGER.error(f"Error creating account: {e}")
-            db.session.rollback()
-            await update.message.reply_text("Error creating account. Please try again later.")
-            
-    except Exception as e:
-        LOGGER.error(f"Unexpected error in create_account: {e}")
-        await update.message.reply_text("An unexpected error occurred. Please try again.")
-async def delete_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def delete_account(update: Update, context: CallbackContext) -> None:
     """Delete a user account."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -307,7 +314,7 @@ async def delete_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 @cooldown()
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def balance(update: Update, context: CallbackContext) -> None:
     """Check user balance."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -325,7 +332,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @cooldown()
-async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def deposit(update: Update, context: CallbackContext) -> None:
     """Add funds to user wallet."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -352,7 +359,7 @@ async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
-            "💳 *Deposit Funds*\n\n"
+            "💳 *Rock Paper Scissors - Deposit Funds*\n\n"
             "Select an amount to deposit or use /deposit [amount] to specify a custom amount.",
             reply_markup=reply_markup,
             parse_mode='Markdown'
@@ -418,7 +425,7 @@ async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @cooldown()
-async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def withdraw(update: Update, context: CallbackContext) -> None:
     """Withdraw funds from user wallet."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -525,7 +532,7 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @cooldown()
-async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def history(update: Update, context: CallbackContext) -> None:
     """View user transaction and game history."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -575,64 +582,98 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @cooldown()
-async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Join a game match."""
+async def join_game(update: Update, context: CallbackContext) -> None:
+    """Join or create a game."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
         return
-    
+
     user = get_user_by_telegram_id(update.effective_user.id)
     update_user_activity(user.id)
-    
-    # Check if custom bet amount provided
+
+    # Check for custom bet amount
     bet_amount = BET_AMOUNT_DEFAULT
-    if context.args and len(context.args) > 0:
+    if context.args:
         try:
             bet_amount = float(context.args[0])
             if bet_amount <= 0:
-                await update.message.reply_text("Bet amount must be greater than zero.")
+                await update.message.reply_text("Bet amount must be greater than 0.")
                 return
         except ValueError:
-            await update.message.reply_text("Invalid bet amount. Please enter a valid number.")
+            await update.message.reply_text("Invalid bet amount. Please provide a valid number.")
             return
-    
+
     # Check user balance
     if user.balance < bet_amount:
         await update.message.reply_text(
-            f"Insufficient balance. You need ${bet_amount:.2f} to join this game.\n"
-            f"Your current balance: ${user.balance:.2f}\n"
-            f"Use /deposit to add more funds."
+            f"Insufficient balance. You need ${bet_amount:.2f}, but your balance is ${user.balance:.2f}."
         )
         return
-    else:
-        # If game is now full (3 players), send choice options to all players
-        if participants >= 3:
-            # Refresh game object to get updated status
-            game = Game.query.get(game.id)
-            
-            if game.status == 'active':
-                # Notify all participants
-                for participant in game.participants:
-                    user_obj = User.query.get(participant.user_id)
-                    if user_obj.telegram_id:
-                        try:
-                            await context.bot.send_message(
-                                chat_id=user_obj.telegram_id,
-                                text=(
-                                    f"🎮 Game #{game.id} is starting!\n\n"
-                                    f"Bet amount: ${game.bet_amount:.2f}\n"
-                                    f"Make your choice:"
-                                ),
-                                reply_markup=GAME_CHOICES
-                            )
-                        except Exception as e:
-                            LOGGER.error(f"Error sending message to user {user_obj.telegram_id}: {e}")
-    else:
-        await update.message.reply_text(message)
+
+    # Look for a waiting game with same bet amount
+    game = Game.query.filter_by(status='waiting', bet_amount=bet_amount).first()
+
+    # If no game exists, create one
+    if not game:
+        game = Game(
+            bet_amount=bet_amount,
+            status='waiting',
+            created_at=datetime.utcnow()
+        )
+        db.session.add(game)
+        db.session.commit()
+
+    # Check if user is already in this game
+    existing_participant = GameParticipant.query.filter_by(
+        game_id=game.id,
+        user_id=user.id
+    ).first()
+
+    if existing_participant:
+        await update.message.reply_text(f"You are already in Game #{game.id}.")
+        return
+
+    # Join the game
+    participant = GameParticipant(
+        game_id=game.id,
+        user_id=user.id,
+        choice=None
+    )
+    db.session.add(participant)
+    db.session.commit()
+
+    participants = GameParticipant.query.filter_by(game_id=game.id).count()
+
+    await update.message.reply_text(
+        f"You joined Game #{game.id} with a bet of ${bet_amount:.2f}.\n"
+        f"Waiting for more players... ({participants}/3)"
+    )
+
+    # If game is now full (3 players), start it
+    if participants >= 3:
+        game.status = 'active'
+        db.session.commit()
+
+        # Notify all players
+        for p in GameParticipant.query.filter_by(game_id=game.id).all():
+            user_obj = User.query.get(p.user_id)
+            if user_obj and user_obj.telegram_id:
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_obj.telegram_id,
+                        text=(
+                            f"🎮 Game #{game.id} is starting!\n\n"
+                            f"Bet amount: ${game.bet_amount:.2f}\n"
+                            f"Make your choice:"
+                        ),
+                        reply_markup=GAME_CHOICES
+                    )
+                except Exception as e:
+                    LOGGER.error(f"Error notifying user {user_obj.telegram_id}: {e}")
 
 
 @cooldown()
-async def game_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def game_status(update: Update, context: CallbackContext) -> None:
     """Check status of current games."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -699,11 +740,11 @@ async def game_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 @cooldown()
-async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def leaderboard(update: Update, context: CallbackContext) -> None:
     """Display the leaderboard."""
     leaderboard_data = get_leaderboard(10)
     
-    text = "🏆 *RPS Arena Leaderboard* 🏆\n\n"
+    text = "🏆 *Rock Paper Scissors Leaderboard* 🏆\n\n"
     
     if not leaderboard_data:
         text += "No players on the leaderboard yet."
@@ -719,7 +760,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 @cooldown()
-async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def profile(update: Update, context: CallbackContext) -> None:
     """Display user profile."""
     if not user_exists(update):
         await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
@@ -768,7 +809,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # Admin commands
 @admin_required
-async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def admin_stats(update: Update, context: CallbackContext) -> None:
     """Admin command to view system statistics."""
     stats = AdminService.get_system_stats()
     
@@ -786,7 +827,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 @admin_required
-async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def admin_users(update: Update, context: CallbackContext) -> None:
     """Admin command to view and manage users."""
     # Check if a search query is provided
     if context.args and len(context.args) > 0:
@@ -843,7 +884,7 @@ async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 @admin_required
-async def admin_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def admin_games(update: Update, context: CallbackContext) -> None:
     """Admin command to view recent games."""
     recent_games = AdminService.get_recent_games(5)
     
@@ -873,7 +914,7 @@ async def admin_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 @admin_required
-async def admin_withdrawals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def admin_withdrawals(update: Update, context: CallbackContext) -> None:
     """Admin command to manage withdrawal requests."""
     pending_withdrawals = AdminService.get_pending_withdrawals()
     
@@ -1015,229 +1056,110 @@ async def send_game_animation(chat_id, game_id, context):
         text=result_text
     )
 
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle button callbacks."""
+def button_callback(update: Update, context: CallbackContext) -> None:
+    """Handle button callbacks"""
     query = update.callback_query
-    await query.answer()  # Answer the callback query to clear the loading state
-    
-    data = query.data
-    user = get_user_by_telegram_id(update.effective_user.id)
-    
-    if not user:
-        await query.edit_message_text("You don't have an account. Use /create_account to get started.")
-        return
-    
-    # Game choice callbacks
-    if data.startswith("choice_"):
-        choice = data.split("_")[1]
-        
-        # Find the active game for this user
-        participant = GameParticipant.query.join(
-            Game, GameParticipant.game_id == Game.id
-        ).filter(
-            GameParticipant.user_id == user.id,
-            Game.status == 'active',
-            GameParticipant.choice == None
+    query.answer()
+
+    try:
+        # Get game ID from user data
+        game_id = context.user_data.get('current_simulation')
+        if not game_id:
+            query.edit_message_text("No active game found!")
+            return
+
+        # Get user's choice from callback data
+        user_choice = query.data
+
+        # Get game and participants
+        game = Game.query.get(game_id)
+        if not game:
+            query.edit_message_text("Game not found!")
+            return
+
+        # Update user's choice
+        user = get_user_by_telegram_id(update.effective_user.id)
+        user_participant = GameParticipant.query.filter_by(
+            game_id=game.id,
+            user_id=user.id
         ).first()
         
-        if not participant:
-            await query.edit_message_text(
-                "You are not in an active game or you've already made your choice."
-            )
+        if not user_participant:
+            query.edit_message_text("You are not part of this game!")
             return
-        
-        game_id = participant.game_id
-        success, message = RPSGame.make_choice(game_id, user.id, choice)
-        
-        if success:
-            await query.edit_message_text(
-                escape_markdown(f"You chose {choice.capitalize()}! Waiting for other players...")
-            )
-            
-            # Check if game is now completed
-            game = Game.query.get(game_id)
-            if game.status == 'completed':
-                # Get game details
-                game_details = RPSGame.get_game_details(game_id)
-                
-                # Send results to all participants
-                for p in game_details['participants']:
-                    user_obj = User.query.get(p['user_id'])
-                    if user_obj.telegram_id:
-                        try:
-                            result_text = (
-                                f"🎮 *Game #{game_id} Results*\n\n"
-                                f"Bet Amount: ${game.bet_amount:.2f}\n\n"
-                                f"*Players:*\n"
-                            )
-                            
-                            for player in game_details['participants']:
-                                user_name = player['username']
-                                player_choice = player['choice'].capitalize() if player['choice'] else "No choice"
-                                winner_text = " 🏆" if player['is_winner'] else ""
-                                result_text += f"- {user_name}: {player_choice}{winner_text}\n"
-                            
-                            if game.winner_id:
-                                winner = User.query.get(game.winner_id)
-                                result_text += f"\n🏆 Winner: {winner.username}"
-                                
-                                # Calculate winnings
-                                total_pot = game.bet_amount * len(game_details['participants'])
-                                platform_fee = total_pot * (PLATFORM_FEE_PERCENT / 100)
-                                winnings = total_pot - platform_fee
-                                
-                                result_text += f"\nWinnings: ${winnings:.2f}"
-                            else:
-                                result_text += "\nResult: Draw - Bets have been refunded."
-                                
-                            # Add link to web animation
-                            base_url = "https://your-name-rps.example.com"  # Your personal website URL
-                            animation_url = f"{base_url}/game/{game_id}/result"
-                            result_text += f"\n\n🎬 [Watch the battle animation]({animation_url})"
-                            
-                            await context.bot.send_message(
-                                chat_id=user_obj.telegram_id,
-                                text=result_text,
-                                parse_mode='Markdown'
-                            )
-                        except Exception as e:
-                            LOGGER.error(f"Error sending game results to user {user_obj.telegram_id}: {e}")
-        else:
-            await query.edit_message_text(message)
-    
-    # Deposit callbacks
-    elif data.startswith("deposit_"):
-        amount = float(data.split("_")[1])
-        success, message = PaymentSystem.deposit(user.id, amount)
-        await query.edit_message_text(message)
-    
-    # Withdraw callbacks
-    elif data.startswith("withdraw_"):
-        amount = float(data.split("_")[1])
-        success, message = PaymentSystem.request_withdrawal(user.id, amount)
-        await query.edit_message_text(message)
-    
-    # Account deletion callbacks
-    elif data == "confirm_delete_account":
-        # Delete user data (cascade should handle related records)
-        db.session.delete(user)
+
+        user_participant.choice = user_choice
         db.session.commit()
+
+        # Get AI choices
+        ai_participants = GameParticipant.query.filter(
+            GameParticipant.game_id == game.id,
+            GameParticipant.user_id != user.id
+        ).all()
+
+        # Process results
+        choices = {
+            'rock': {'beats': 'scissors', 'loses_to': 'paper'},
+            'paper': {'beats': 'rock', 'loses_to': 'scissors'},
+            'scissors': {'beats': 'paper', 'loses_to': 'rock'}
+        }
+
+        # Count wins for each player
+        wins = {p.user_id: 0 for p in [user_participant] + ai_participants}
         
-        await query.edit_message_text(
-            "Your account has been deleted. All associated data has been removed from our system.\n\n"
-            "If you wish to play again in the future, you can create a new account with /create_account."
+        all_participants = [user_participant] + ai_participants
+        for p1 in all_participants:
+            for p2 in all_participants:
+                if p1.id != p2.id:
+                    if choices[p1.choice]['beats'] == p2.choice:
+                        wins[p1.user_id] += 1
+
+        # Find winner(s)
+        max_wins = max(wins.values())
+        winners = [uid for uid, win_count in wins.items() if win_count == max_wins]
+        
+        # Calculate prize pool and distribute
+        prize_pool = game.bet_amount * 3  # Total of 3 players
+        
+        if len(winners) == 1:
+            # Single winner takes all
+            winner = User.query.get(winners[0])
+            winner.balance += Decimal(str(prize_pool))
+            result_text = f"🏆 Winner: {winner.username}\n"
+        else:
+            # Tie - refund bets
+            for participant in all_participants:
+                participant.user.balance += Decimal(str(game.bet_amount))
+            result_text = "🤝 It's a tie! Bets refunded.\n"
+
+        # Mark game as completed
+        game.status = 'completed'
+        game.completed_at = datetime.utcnow()
+        db.session.commit()
+
+        # Remove game ID from user data
+        del context.user_data['current_simulation']
+
+        # Show results
+        result_text += f"\nChoices:\n"
+        result_text += f"👤 You: {user_participant.choice}\n"
+        for ai in ai_participants:
+            result_text += f"🤖 {ai.user.username}: {ai.choice}\n"
+
+        query.edit_message_text(
+            text=result_text,
+            reply_markup=None
         )
-    
-    elif data == "cancel_delete_account":
-        await query.edit_message_text(
-            "Account deletion cancelled. Your account remains active."
-        )
-    
-    # Admin callbacks
-    elif data.startswith("admin_") and user.is_admin:
-        parts = data.split("_")
-        action = parts[1]
-        
-        # Admin - View user details
-        if action == "view" and parts[2] == "user":
-            target_user_id = int(parts[3])
-            user_details = AdminService.get_user_details(target_user_id)
-            
-            if not user_details:
-                await query.edit_message_text("User not found.")
-                return
-            
-            target_user = user_details['user']
-            win_rate = user_details['win_rate']
-            
-            text = (
-                f"👤 *User Details: {target_user.username}*\n\n"
-                f"ID: {target_user.id}\n"
-                f"Telegram ID: {target_user.telegram_id}\n"
-                f"Balance: ${target_user.balance:.2f}\n"
-                f"Games Played: {target_user.games_played}\n"
-                f"Win Rate: {win_rate:.1f}%\n"
-                f"Created: {target_user.created_at.strftime('%Y-%m-%d %H:%M')}\n"
-                f"Last Active: {target_user.last_active.strftime('%Y-%m-%d %H:%M')}\n"
-                f"Admin: {'Yes' if target_user.is_admin else 'No'}\n\n"
-                f"*Recent Transactions:*\n"
-            )
-            
-            # Add recent transactions
-            if not user_details['transactions']:
-                text += "No transactions found.\n"
-            else:
-                for tx in user_details['transactions'][:3]:
-                    tx_type = tx.transaction_type.capitalize()
-                    amount_str = f"+${tx.amount:.2f}" if tx.amount >= 0 else f"-${abs(tx.amount):.2f}"
-                    date_str = tx.created_at.strftime("%Y-%m-%d %H:%M")
-                    
-                    text += f"{date_str}: {tx_type} {amount_str} ({tx.status})\n"
-            
-            await query.edit_message_text(text, parse_mode='Markdown')
-        
-        # Admin - Make user an admin
-        elif action == "make" and parts[2] == "admin":
-            target_user_id = int(parts[3])
-            success, message = AdminService.make_admin(target_user_id)
-            await query.edit_message_text(message)
-        
-        # Admin - Remove admin status
-        elif action == "remove" and parts[2] == "admin":
-            target_user_id = int(parts[3])
-            success, message = AdminService.remove_admin(target_user_id)
-            await query.edit_message_text(message)
-        
-        # Admin - Approve withdrawal
-        elif action == "approve" and parts[2] == "withdrawal":
-            withdrawal_id = int(parts[3])
-            success, message = AdminService.approve_withdrawal(withdrawal_id, user.id)
-            await query.edit_message_text(message)
-            
-            # Notify user about approved withdrawal
-            withdrawal = WithdrawalRequest.query.get(withdrawal_id)
-            if success and withdrawal:
-                target_user = User.query.get(withdrawal.user_id)
-                if target_user.telegram_id:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=target_user.telegram_id,
-                            text=(
-                                f"💸 *Withdrawal Approved*\n\n"
-                                f"Your withdrawal request for ${withdrawal.amount:.2f} has been approved.\n"
-                                f"Transaction ID: {withdrawal.transaction_id}"
-                            ),
-                            parse_mode='Markdown'
-                        )
-                    except Exception as e:
-                        LOGGER.error(f"Error sending approval notification to user {target_user.telegram_id}: {e}")
-        
-        # Admin - Reject withdrawal
-        elif action == "reject" and parts[2] == "withdrawal":
-            withdrawal_id = int(parts[3])
-            success, message = AdminService.reject_withdrawal(withdrawal_id, user.id)
-            await query.edit_message_text(message)
-            
-            # Notify user about rejected withdrawal
-            withdrawal = WithdrawalRequest.query.get(withdrawal_id)
-            if success and withdrawal:
-                target_user = User.query.get(withdrawal.user_id)
-                if target_user.telegram_id:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=target_user.telegram_id,
-                            text=(
-                                f"❌ *Withdrawal Rejected*\n\n"
-                                f"Your withdrawal request for ${withdrawal.amount:.2f} has been rejected.\n"
-                                f"The amount has been refunded to your wallet."
-                            ),
-                            parse_mode='Markdown'
-                        )
-                    except Exception as e:
-                        LOGGER.error(f"Error sending rejection notification to user {target_user.telegram_id}: {e}")
+
+    except Exception as e:
+        LOGGER.error(f"Error in button callback: {e}")
+        query.edit_message_text("❌ Error processing game result. Please try again.")
+        if 'current_simulation' in context.user_data:
+            del context.user_data['current_simulation']
+        db.session.rollback()
 
 
-async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def whoami(update: Update, context: CallbackContext) -> None:
     """Debug command to show user information"""
     telegram_id = update.effective_user.id
     telegram_username = update.effective_user.username
@@ -1246,7 +1168,7 @@ async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     if user:
         await update.message.reply_text(
-            escape_markdown(f"*User Information*\n\n")
+            escape_markdown("*User Information*\n\n") +
             f"Telegram ID: `{telegram_id}`\n"
             f"Telegram Username: @{telegram_username}\n"
             f"Database ID: {user.id}\n"
@@ -1270,7 +1192,7 @@ async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # Add this function to handle unknown commands
-async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def unknown_command(update: Update, context: CallbackContext) -> None:
     """Handle unknown commands by showing available commands."""
     LOGGER.info(f"User {update.effective_user.id} tried unknown command: {update.message.text}")
     
@@ -1284,7 +1206,7 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 
-async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def debug_command(update: Update, context: CallbackContext) -> None:
     """Debug command to test bot functionality."""
     user_id = update.effective_user.id
     username = update.effective_user.username
@@ -1314,7 +1236,7 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
-async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_menu_button(update: Update, context: CallbackContext) -> None:
     """Handle menu button selections"""
     text = update.message.text
     
@@ -1334,7 +1256,11 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "📋 *Game Commands*\n\n"
             "/join_game - Join a match with default bet ($10)\n"
             "/join_game [amount] - Join with custom bet amount\n"
-            "/game_status - Check current game status",
+            "/game_status - Check current game status\n"
+            "/simulate - Watch RPS battle simulation\n"
+            "/simulate [rock] [paper] [scissors] - Custom simulation\n\n"
+            "Example:\n"
+            "/simulate 30 30 30 - Start with 30 of each type",
             parse_mode='Markdown'
         )
     elif text == "📊 Stats":
@@ -1348,197 +1274,160 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(
             "📋 *Help Commands*\n\n"
             "/help - Show all available commands\n"
-            "/about - About the RPS Arena bot",
+            "/about - About the Rock Paper Scissors bot",
             parse_mode='Markdown'
         )
 
 
 @cooldown()
-async def replay_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Replay a game animation."""
-    if not user_exists(update):
-        await update.message.reply_text("You don't have an account yet. Use /create_account to get started.")
-        return
-    
-    user = get_user_by_telegram_id(update.effective_user.id)
-    update_user_activity(user.id)
-    
-    # Check if game ID is provided
-    if not context.args or len(context.args) == 0:
-        # Show recent games instead
-        recent_games = db.session.query(Game).join(
-            GameParticipant, Game.id == GameParticipant.game_id
-        ).filter(
-            GameParticipant.user_id == user.id,
-            Game.status == 'completed'
-        ).order_by(Game.completed_at.desc()).limit(5).all()
-        
-        if not recent_games:
-            await update.message.reply_text("You haven't played any games yet. Use /join_game to start playing!")
-            return
-        
-        # Create keyboard with recent games
-        keyboard = []
-        for game in recent_games:
-            keyboard.append([InlineKeyboardButton(
-                f"Game #{game.id} - {game.completed_at.strftime('%Y-%m-%d %H:%M')}",
-                callback_data=f"replay_{game.id}"
-            )])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "Select a game to replay:",
-            reply_markup=reply_markup
-        )
-        return
-    
-    # Get game ID from arguments
+def simulate(update: Update, context: CallbackContext) -> None:
+    """Simulate a game with AI players"""
     try:
-        game_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("Invalid game ID. Please provide a number.")
-        return
-    
-    # Check if game exists and user participated
-    game = Game.query.get(game_id)
-    if not game or game.status != 'completed':
-        await update.message.reply_text(f"Game #{game_id} not found or not completed.")
-        return
-    
-    participant = GameParticipant.query.filter_by(
-        game_id=game_id, user_id=user.id
-    ).first()
-    
-    if not participant:
-        await update.message.reply_text(f"You didn't participate in Game #{game_id}.")
-        return
-    
-    # Send the animation
-    await send_game_animation(update.message.chat_id, game_id, context)
-
-
-
-@cooldown()
-async def simulate_rps(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Run a Rock-Paper-Scissors simulation and send as animation."""
-    try:
-        await update.message.reply_text("🎮 Creating RPS simulation... This may take a moment.")
-        
-        # Get custom counts if provided
-        rock_count = 33
-        paper_count = 35
-        scissors_count = 31
-        
-        if context.args and len(context.args) >= 3:
-            try:
-                rock_count = max(1, min(50, int(context.args[0])))
-                paper_count = max(1, min(50, int(context.args[1])))
-                scissors_count = max(1, min(50, int(context.args[2])))
-            except ValueError:
-                await update.message.reply_text("Invalid arguments! Using default values instead.")
-        
-        # Send typing action while processing
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_video")
-        
-        # Run the simulation
-        gif_path, winner, stats = create_rps_simulation(rock_count, paper_count, scissors_count)
-        
-        # Create caption
-        caption = (f"🎮 *Rock-Paper-Scissors Simulation*\n\n"
-                 f"Starting: Rock: {rock_count}, Paper: {paper_count}, Scissors: {scissors_count}\n"
-                 f"Final: Rock: {stats[0]}, Paper: {stats[1]}, Scissors: {stats[2]}\n\n")
-        
-        if winner == "rock":
-            caption += "🪨 *Rock wins!* Rock crushes scissors!"
-        elif winner == "paper":
-            caption += "📄 *Paper wins!* Paper covers rock!"
-        elif winner == "scissors":
-            caption += "✂️ *Scissors win!* Scissors cut paper!"
-        else:
-            caption += "🤝 *It's a draw!* No clear winner."
-        
-        # Send the animation
-        with open(gif_path, 'rb') as animation:
-            await context.bot.send_animation(
-                chat_id=update.effective_chat.id,
-                animation=animation,
-                caption=caption,
-                parse_mode='Markdown'
+        # Check if user has an account
+        user = get_user_by_telegram_id(update.effective_user.id)
+        if not user:
+            update.message.reply_text(
+                "You need to create an account first! Use /create_account"
             )
-        
-        # Clean up
-        if os.path.exists(gif_path):
-            os.remove(gif_path)
-            
-    except Exception as e:
-        LOGGER.error(f"Error in RPS simulation: {e}")
-        await update.message.reply_text("Sorry, there was an error creating the simulation. Please try again later.")
+            return
 
-async def main() -> None:
+        # Parse bet amount if provided
+        bet_amount = 10.0  # Default bet amount
+        if context.args:
+            try:
+                bet_amount = float(context.args[0])
+                if bet_amount <= 0:
+                    update.message.reply_text("Bet amount must be greater than 0!")
+                    return
+            except ValueError:
+                update.message.reply_text("Invalid bet amount! Please provide a valid number.")
+                return
+
+        # Check user balance
+        if user.balance < Decimal(str(bet_amount)):
+            update.message.reply_text(
+                f"Insufficient balance! You need ETB {bet_amount:.2f} to play."
+            )
+            return
+
+        # Create AI players
+        ai_names = ["🤖 Bot-Alpha", "🤖 Bot-Beta"]
+        ai_users = []
+        
+        for name in ai_names:
+            ai_user = User(
+                username=name,
+                telegram_id=None,
+                balance=Decimal('1000.00'),
+                is_bot=True,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(ai_user)
+            ai_users.append(ai_user)
+        
+        # Create game
+        game = Game(
+            bet_amount=bet_amount,
+            status='active',
+            created_at=datetime.utcnow()
+        )
+        db.session.add(game)
+        
+        # Add participants
+        participants = [user] + ai_users
+        choices = ['rock', 'paper', 'scissors']
+        
+        for p in participants:
+            # Deduct bet amount
+            p.balance -= Decimal(str(bet_amount))
+            
+            # Add to game
+            participant = GameParticipant(
+                game_id=game.id,
+                user_id=p.id,
+                choice=random.choice(choices) if p.is_bot else None,
+                joined_at=datetime.utcnow()
+            )
+            db.session.add(participant)
+        
+        db.session.commit()
+
+        # Store game ID in user data for callback handling
+        context.user_data['current_simulation'] = game.id
+
+        # Send initial message
+        update.message.reply_text(
+            f"🎮 Simulation started!\n\n"
+            f"Game #{game.id}\n"
+            f"Bet amount: ETB {bet_amount:.2f}\n\n"
+            f"Players:\n"
+            f"👤 You\n"
+            f"🤖 {ai_names[0]}\n"
+            f"🤖 {ai_names[1]}\n\n"
+            f"Make your choice:",
+            reply_markup=GAME_CHOICES
+        )
+
+    except Exception as e:
+        LOGGER.error(f"Error in simulate command: {e}")
+        update.message.reply_text("❌ Error starting simulation. Please try again.")
+        if 'current_simulation' in context.user_data:
+            del context.user_data['current_simulation']
+        db.session.rollback()
+
+def main() -> None:
     """Start the bot."""
     if not BOT_TOKEN:
         LOGGER.error("No BOT_TOKEN provided. Please set the BOT_TOKEN environment variable.")
         return
     
     try:
-        # Initialize the application with explicit error handling
-        application = Application.builder().token(BOT_TOKEN).build()
-        
-        # Register ALL command handlers correctly
-        LOGGER.info("Registering command handlers...")
+        # Initialize the updater and dispatcher
+        updater = Updater(BOT_TOKEN)
+        dispatcher = updater.dispatcher
         
         # Basic commands
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("about", about))
+        dispatcher.add_handler(CommandHandler("start", start))
+        dispatcher.add_handler(CommandHandler("help", help_command))
+        dispatcher.add_handler(CommandHandler("about", about))
         
         # Account commands
-        application.add_handler(CommandHandler("create_account", create_account))
-    # Also support misspelled version
-    application.add_handler(CommandHandler("creat_account", create_account))
-        application.add_handler(CommandHandler("delete_account", delete_account))
-        application.add_handler(CommandHandler("balance", balance))
-        application.add_handler(CommandHandler("deposit", deposit))
-        application.add_handler(CommandHandler("withdraw", withdraw))
-        application.add_handler(CommandHandler("history", history))
+        dispatcher.add_handler(CommandHandler("create_account", create_account))
+        dispatcher.add_handler(CommandHandler("delete_account", delete_account))
+        dispatcher.add_handler(CommandHandler("balance", balance))
+        dispatcher.add_handler(CommandHandler("deposit", deposit))
+        dispatcher.add_handler(CommandHandler("withdraw", withdraw))
+        dispatcher.add_handler(CommandHandler("history", history))
         
         # Game commands
-        application.add_handler(CommandHandler("join_game", join_game))
-        application.add_handler(CommandHandler("game_status", game_status))
+        dispatcher.add_handler(CommandHandler("join_game", join_game))
+        dispatcher.add_handler(CommandHandler("game_status", game_status))
+        dispatcher.add_handler(CommandHandler("simulate", simulate))
         
         # Stats commands
-        application.add_handler(CommandHandler("leaderboard", leaderboard))
-    application.add_handler(CommandHandler("simulate", simulate_rps))
-        application.add_handler(CommandHandler("profile", profile))
-    application.add_handler(CommandHandler("replay", replay_game))
-        
-        # Admin commands
-        application.add_handler(CommandHandler("admin_stats", admin_stats))
-        application.add_handler(CommandHandler("admin_users", admin_users))
-        application.add_handler(CommandHandler("admin_games", admin_games))
-        application.add_handler(CommandHandler("admin_withdrawals", admin_withdrawals))
-        
-        # Debug commands
-        application.add_handler(CommandHandler("whoami", whoami))
+        dispatcher.add_handler(CommandHandler("leaderboard", leaderboard))
+        dispatcher.add_handler(CommandHandler("profile", profile))
         
         # Add callback query handler for buttons
-        application.add_handler(CallbackQueryHandler(button_callback))
-    # Add debug command
-    application.add_handler(CommandHandler("debug", debug_command))
+        dispatcher.add_handler(CallbackQueryHandler(button_callback))
         
-        # Add a message handler to provide help for unknown commands
-        application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
-    
-    # Add menu button handler
-    application.add_handler(MessageHandler(filters.Regex("^(💰 Account|🎮 Game|📊 Stats|ℹ️ Help)$"), handle_menu_button))
+        # Add message handler for menu buttons
+        dispatcher.add_handler(MessageHandler(
+            filters.Regex("^(💰 Account|🎮 Game|📊 Stats|ℹ️ Help)$"),
+            handle_menu_button
+        ))
+        
+        # Add handler for unknown commands
+        dispatcher.add_handler(MessageHandler(filters.Command, unknown_command))
         
         LOGGER.info("All command handlers registered successfully")
         
-        # Start the bot with proper polling
-        await application.initialize()
-        await application.start()
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Start the bot
+        LOGGER.info("Starting bot...")
+        updater.start_polling()
+        
+        # Run the bot until you press Ctrl-C
+        updater.idle()
         
     except Exception as e:
         LOGGER.error(f"Error in bot startup: {e}")
@@ -1546,4 +1435,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

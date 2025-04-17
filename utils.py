@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 import os
+import requests
 
 # Temporarily disable telegram imports for web interface
 # from telegram import Update
@@ -168,3 +169,27 @@ def validate_username(username):
     # Simple character validation - more permissive than regex
     valid_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
     return all(c in valid_chars for c in username)
+
+
+def process_chapa_payment(amount, email, first_name, last_name, tx_ref):
+    """Process a payment using Chapa Wallet."""
+    url = f"{CHAPA_API_URL}/transaction/initialize"
+    headers = {
+        "Authorization": f"Bearer {CHAPA_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "amount": amount,
+        "currency": "ETB",  # Ethiopian Birr
+        "email": email,
+        "first_name": first_name,
+        "last_name": last_name,
+        "tx_ref": tx_ref,  # Unique transaction reference
+        "callback_url": "http://localhost:5000/payment_status",  # Update with your callback URL
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code == 200:
+        return response.json()  # Return the payment response
+    else:
+        return {"error": response.json()}

@@ -11,206 +11,376 @@ import os
 import imageio
 import tempfile
 from datetime import datetime
+from typing import Tuple, List
+import numpy as np
+from PIL import Image
+from models import User, Game, GameParticipant, Transaction
+from app import db
+from decimal import Decimal
 
-class RPSSimulation:
-    """Rock Paper Scissors simulation that generates a GIF animation"""
-    
-    def __init__(self, num_rock=33, num_paper=35, num_scissors=31, frames=180, size=(500, 500)):
-        """Initialize the simulation"""
-        self.num_rock = num_rock
-        self.num_paper = num_paper
-        self.num_scissors = num_scissors
-        self.frames = frames
-        self.width, self.height = size
-        self.temp_dir = tempfile.mkdtemp()
-        
-        # Colors
-        self.BLACK = (0, 0, 0)
-        self.GRAY = (150, 150, 150)
-        self.CREAM = (255, 253, 208)
-        self.RED = (255, 0, 0)
-        self.WHITE = (255, 255, 255)
-        
-        # Simulation parameters
-        self.SPEED = 1.0
-        self.RADIUS = 8
-        self.INTERACTION_DISTANCE = 15
-    
-    def create_elements(self):
-        """Create the initial elements"""
-        elements = []
-        for _ in range(self.num_rock):
-            elements.append(self._create_element("rock"))
-        for _ in range(self.num_paper):
-            elements.append(self._create_element("paper"))
-        for _ in range(self.num_scissors):
-            elements.append(self._create_element("scissors"))
-        return elements
-    
-    def _create_element(self, element_type):
-        """Create a single element"""
-        return {
-            "type": element_type,
-            "x": random.randint(self.RADIUS, self.width - self.RADIUS),
-            "y": random.randint(self.RADIUS + 100, self.height - self.RADIUS),
-            "vx": random.uniform(-self.SPEED, self.SPEED),
-            "vy": random.uniform(-self.SPEED, self.SPEED)
-        }
-    
-    def move_element(self, elem):
-        """Move an element based on its velocity"""
-        elem["x"] += elem["vx"]
-        elem["y"] += elem["vy"]
-        
+class Element:
+    def __init__(self, x: float, y: float, element_type: str):
+        self.x = x
+        self.y = y
+        self.element_type = element_type
+        self.dx = random.uniform(-1, 1)
+        self.dy = random.uniform(-1, 1)
+        self.size = 10
+        self.alive = True
+
+    def move(self, width: int, height: int):
+        """Move the element and bounce off walls"""
+        self.x += self.dx
+        self.y += self.dy
+
         # Bounce off walls
-        if elem["x"] <= self.RADIUS or elem["x"] >= self.width - self.RADIUS:
-            elem["vx"] *= -1
-        if elem["y"] <= self.RADIUS + 100 or elem["y"] >= self.height - self.RADIUS:
-            elem["vy"] *= -1
+        if self.x < 0 or self.x > width:
+            self.dx *= -1
+        if self.y < 0 or self.y > height:
+            self.dy *= -1
+
+    def interact(self, other: 'Element') -> bool:
+        """Check interaction with another element"""
+        distance = math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+        if distance < self.size * 2:
+            if self.beats(other.element_type):
+                other.alive = False
+                return True
+        return False
+
+    def beats(self, other_type: str) -> bool:
+        """Check if this element beats the other type"""
+        return (
+            (self.element_type == 'rock' and other_type == 'scissors') or
+            (self.element_type == 'paper' and other_type == 'rock') or
+            (self.element_type == 'scissors' and other_type == 'paper')
+        )
+
+def create_rps_simulation(rock_count: int, paper_count: int, scissors_count: int) -> Tuple[str, str, List[int]]:
+    """Create a Rock-Paper-Scissors simulation and save as GIF"""
+    # Initialize Pygame
+    pygame.init()
+    width, height = 400, 400
+    screen = pygame.Surface((width, height))
+
+    # Colors
+    WHITE = (255, 255, 255)
+    GRAY = (128, 128, 128)
+    CREAM = (255, 253, 208)
+    RED = (255, 0, 0)
     
-    def interact(self, elem1, elem2):
-        """Handle interaction between two elements"""
-        # Calculate distance
-        dx = elem1["x"] - elem2["x"]
-        dy = elem1["y"] - elem2["y"]
-        distance = math.sqrt(dx**2 + dy**2)
+    # Create elements
+    elements = []
+    for _ in range(rock_count):
+        elements.append(Element(
+            random.randint(0, width),
+            random.randint(0, height),
+            'rock'
+        ))
+    for _ in range(paper_count):
+        elements.append(Element(
+            random.randint(0, width),
+            random.randint(0, height),
+            'paper'
+        ))
+    for _ in range(scissors_count):
+        elements.append(Element(
+            random.randint(0, width),
+            random.randint(0, height),
+            'scissors'
+        ))
+
+    # Create frames for GIF
+    frames = []
+    max_frames = 200
+    
+    for frame in range(max_frames):
+        # Fill background
+        screen.fill(WHITE)
         
-        if distance < self.INTERACTION_DISTANCE:
-            # Apply RPS rules
-            if (elem1["type"] == "rock" and elem2["type"] == "scissors") or \
-               (elem1["type"] == "scissors" and elem2["type"] == "paper") or \
-               (elem1["type"] == "paper" and elem2["type"] == "rock"):
-                # elem1 wins, convert elem2
-                elem2["type"] = elem1["type"]
+        # Move and draw elements
+        for element in elements:
+            if not element.alive:
+                continue
                 
-                # Give slight push
-                if distance > 0:
-                    push = 0.1
-                    elem1["vx"] += dx / distance * push
-                    elem1["vy"] += dy / distance * push
-                    elem2["vx"] -= dx / distance * push
-                    elem2["vy"] -= dy / distance * push
-    
-    def draw_element(self, screen, elem):
-        """Draw a single element on the screen"""
-        if elem["type"] == "rock":
-            pygame.draw.circle(screen, self.GRAY, (int(elem["x"]), int(elem["y"])), self.RADIUS)
-        elif elem["type"] == "paper":
-            rect = pygame.Rect(elem["x"] - self.RADIUS, elem["y"] - self.RADIUS, self.RADIUS*2, self.RADIUS*2)
-            pygame.draw.rect(screen, self.CREAM, rect)
-        elif elem["type"] == "scissors":
-            # Draw an X
-            line1_start = (elem["x"] - self.RADIUS*0.7, elem["y"] - self.RADIUS*0.7)
-            line1_end = (elem["x"] + self.RADIUS*0.7, elem["y"] + self.RADIUS*0.7)
-            line2_start = (elem["x"] + self.RADIUS*0.7, elem["y"] - self.RADIUS*0.7)
-            line2_end = (elem["x"] - self.RADIUS*0.7, elem["y"] + self.RADIUS*0.7)
-            pygame.draw.line(screen, self.RED, line1_start, line1_end, 2)
-            pygame.draw.line(screen, self.RED, line2_start, line2_end, 2)
-    
-    def render_frame(self, elements, frame_num):
-        """Render a single frame of the simulation"""
-        frame_path = os.path.join(self.temp_dir, f"frame_{frame_num:04d}.png")
-        
-        # Create a Pygame surface
-        screen = pygame.Surface((self.width, self.height))
-        screen.fill(self.BLACK)
-        
-        # Draw border
-        pygame.draw.rect(screen, self.WHITE, pygame.Rect(30, 100, self.width - 60, self.height - 130), 2)
-        
-        # Draw title
-        font = pygame.font.SysFont('Arial', 30)
-        title = font.render("‼️Rock vs Paper vs Scissors‼️", True, self.WHITE)
-        screen.blit(title, (self.width//2 - title.get_width()//2, 40))
-        
-        # Count elements of each type
-        rock_count = sum(1 for elem in elements if elem["type"] == "rock")
-        paper_count = sum(1 for elem in elements if elem["type"] == "paper")
-        scissors_count = sum(1 for elem in elements if elem["type"] == "scissors")
-        
-        # Draw counts
-        count_font = pygame.font.SysFont('Arial', 24)
-        rock_text = count_font.render(f"🪨 {rock_count}", True, self.GRAY)
-        paper_text = count_font.render(f"📄 {paper_count}", True, self.CREAM)
-        scissors_text = count_font.render(f"✂️ {scissors_count}", True, self.RED)
-        
-        screen.blit(rock_text, (self.width // 4 - 30, 75))
-        screen.blit(paper_text, (self.width // 2 - 30, 75))
-        screen.blit(scissors_text, (3 * self.width // 4 - 30, 75))
-        
-        # Draw elements
-        for elem in elements:
-            self.draw_element(screen, elem)
-        
-        # Save frame
-        pygame.image.save(screen, frame_path)
-        return frame_path, (rock_count, paper_count, scissors_count)
-    
-    def run_simulation(self):
-        """Run the full simulation and create a GIF"""
-        # Initialize Pygame
-        pygame.init()
-        pygame.font.init()
-        
-        # Create elements
-        elements = self.create_elements()
-        
-        # List to store frame paths
-        frame_paths = []
-        frame_stats = []
-        
-        # Generate frames
-        for frame in range(self.frames):
-            # Move elements
-            for elem in elements:
-                self.move_element(elem)
+            element.move(width, height)
             
-            # Handle interactions
-            for i in range(len(elements)):
-                for j in range(i+1, len(elements)):
-                    self.interact(elements[i], elements[j])
-            
-            # Every 2 frames, render and save
-            if frame % 2 == 0:
-                path, stats = self.render_frame(elements, frame // 2)
-                frame_paths.append(path)
-                frame_stats.append(stats)
-        
-        # Create GIF
-        output_path = f'rps_simulation_{datetime.now().strftime("%Y%m%d_%H%M%S")}.gif'
-        with imageio.get_writer(output_path, mode='I', duration=0.08) as writer:
-            for frame_path in frame_paths:
-                image = imageio.imread(frame_path)
-                writer.append_data(image)
-        
-        # Clean up
-        for path in frame_paths:
-            if os.path.exists(path):
-                os.remove(path)
-        
-        # Find the winner
-        final_stats = frame_stats[-1]
-        rock_count, paper_count, scissors_count = final_stats
-        
+            # Draw different shapes based on element type
+            if element.element_type == 'rock':
+                pygame.draw.circle(
+                    screen,
+                    GRAY,
+                    (int(element.x), int(element.y)),
+                    element.size
+                )
+            elif element.element_type == 'paper':
+                pygame.draw.rect(
+                    screen,
+                    CREAM,
+                    (int(element.x - element.size),
+                     int(element.y - element.size),
+                     element.size * 2,
+                     element.size * 2)
+                )
+            else:  # scissors
+                size = element.size
+                center = (int(element.x), int(element.y))
+                points = [
+                    (center[0] - size, center[1] - size),
+                    (center[0] + size, center[1] + size),
+                    (center[0] + size, center[1] - size),
+                    (center[0] - size, center[1] + size)
+                ]
+                pygame.draw.line(screen, RED, points[0], points[1], 3)
+                pygame.draw.line(screen, RED, points[2], points[3], 3)
+
+        # Check interactions
+        for i, elem1 in enumerate(elements):
+            if not elem1.alive:
+                continue
+            for elem2 in elements[i+1:]:
+                if not elem2.alive:
+                    continue
+                elem1.interact(elem2)
+                elem2.interact(elem1)
+
+        # Convert Pygame surface to PIL Image
+        string_image = pygame.image.tostring(screen, 'RGB')
+        temp_surface = Image.frombytes('RGB', (width, height), string_image)
+        frames.append(temp_surface)
+
+        # Count surviving elements
+        rock_alive = sum(1 for e in elements if e.alive and e.element_type == 'rock')
+        paper_alive = sum(1 for e in elements if e.alive and e.element_type == 'paper')
+        scissors_alive = sum(1 for e in elements if e.alive and e.element_type == 'scissors')
+
+        # Check if simulation should end
+        if rock_alive == 0 and paper_alive == 0 or \
+           paper_alive == 0 and scissors_alive == 0 or \
+           scissors_alive == 0 and rock_alive == 0:
+            break
+
+    # Save as GIF
+    gif_path = 'rps_simulation.gif'
+    frames[0].save(
+        gif_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=50,
+        loop=0
+    )
+
+    # Determine winner
+    rock_count = sum(1 for e in elements if e.alive and e.element_type == 'rock')
+    paper_count = sum(1 for e in elements if e.alive and e.element_type == 'paper')
+    scissors_count = sum(1 for e in elements if e.alive and e.element_type == 'scissors')
+
+    if rock_count > paper_count and rock_count > scissors_count:
+        winner = "rock"
+    elif paper_count > rock_count and paper_count > scissors_count:
+        winner = "paper"
+    elif scissors_count > rock_count and scissors_count > paper_count:
+        winner = "scissors"
+    else:
         winner = "draw"
-        if rock_count > paper_count and rock_count > scissors_count:
-            winner = "rock"
-        elif paper_count > rock_count and paper_count > scissors_count:
-            winner = "paper"
-        elif scissors_count > rock_count and scissors_count > paper_count:
-            winner = "scissors"
+
+    # Clean up
+    pygame.quit()
+
+    return gif_path, winner, [rock_count, paper_count, scissors_count]
+
+def determine_winner(choices: List[str]) -> Tuple[int, str]:
+    """
+    Determine the winner from a list of choices.
+    Returns tuple of (winner_index, reason)
+    """
+    if len(set(choices)) == 1:
+        return -1, "It's a tie!"
+    
+    winning_combinations = {
+        'rock': 'scissors',
+        'paper': 'rock',
+        'scissors': 'paper'
+    }
+    
+    for i, choice in enumerate(choices):
+        if all(choice == 'rock' and other == 'scissors' or
+               choice == 'paper' and other == 'rock' or
+               choice == 'scissors' and other == 'paper'
+               for j, other in enumerate(choices) if i != j):
+            return i, f"{choice.capitalize()} beats {winning_combinations[choice]}"
+    
+    # If no clear winner, return first winning matchup
+    for i, choice in enumerate(choices):
+        next_choice = choices[(i + 1) % len(choices)]
+        if winning_combinations[choice] == next_choice:
+            return i, f"{choice.capitalize()} beats {next_choice}"
+    
+    return -1, "No winner determined"
+
+def simulate_game(update, context, bet_amount: float = 10.0) -> None:
+    """
+    Simulate a game with AI players
+    """
+    try:
+        # Get or create the user
+        user = User.query.filter_by(telegram_id=update.effective_user.id).first()
+        if not user:
+            update.message.reply_text(
+                "You need to create an account first! Use /create_account"
+            )
+            return
+
+        # Check user balance
+        if user.balance < Decimal(str(bet_amount)):
+            update.message.reply_text(
+                f"Insufficient balance! You need ETB {bet_amount:.2f} to play."
+            )
+            return
+
+        # Create AI players
+        ai_names = ["🤖 Bot-Alpha", "🤖 Bot-Beta"]
+        ai_users = []
         
-        return output_path, winner, final_stats
+        for name in ai_names:
+            ai_user = User(
+                username=name,
+                telegram_id=None,
+                balance=Decimal('1000.00'),
+                is_bot=True,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(ai_user)
+            ai_users.append(ai_user)
         
-# Function to run the simulation from outside
-def create_rps_simulation(num_rock=33, num_paper=35, num_scissors=31):
-    """Create an RPS simulation GIF with the given parameters"""
-    simulation = RPSSimulation(num_rock, num_paper, num_scissors)
-    return simulation.run_simulation()
+        # Create game
+        game = Game(
+            bet_amount=bet_amount,
+            status='active',
+            created_at=datetime.utcnow()
+        )
+        db.session.add(game)
+        
+        # Add participants
+        participants = [user] + ai_users
+        choices = ['rock', 'paper', 'scissors']
+        
+        for p in participants:
+            # Deduct bet amount
+            p.balance -= Decimal(str(bet_amount))
+            
+            # Add to game
+            participant = GameParticipant(
+                game_id=game.id,
+                user_id=p.id,
+                choice=random.choice(choices) if p.is_bot else None,
+                joined_at=datetime.utcnow()
+            )
+            db.session.add(participant)
+        
+        db.session.commit()
+
+        # Send initial message
+        update.message.reply_text(
+            f"🎮 Simulation started!\n\n"
+            f"Game #{game.id}\n"
+            f"Bet amount: ETB {bet_amount:.2f}\n\n"
+            f"Players:\n"
+            f"👤 You\n"
+            f"🤖 {ai_names[0]}\n"
+            f"🤖 {ai_names[1]}\n\n"
+            f"Make your choice!"
+        )
+
+        return game.id
+
+    except Exception as e:
+        db.session.rollback()
+        update.message.reply_text(
+            "❌ Error starting simulation. Please try again."
+        )
+        raise e
+
+def process_simulation_result(game_id: int, user_choice: str) -> Tuple[bool, str]:
+    """
+    Process the result of a simulated game after user makes their choice
+    Returns (success, message)
+    """
+    try:
+        game = Game.query.get(game_id)
+        if not game or game.status != 'active':
+            return False, "Game not found or already completed"
+
+        # Update user's choice
+        participants = GameParticipant.query.filter_by(game_id=game_id).all()
+        human_participant = next(p for p in participants if not User.query.get(p.user_id).is_bot)
+        human_participant.choice = user_choice
+        
+        # Get all choices
+        choices = [p.choice for p in sorted(participants, key=lambda x: x.joined_at)]
+        player_names = [
+            "You" if not User.query.get(p.user_id).is_bot else User.query.get(p.user_id).username
+            for p in sorted(participants, key=lambda x: x.joined_at)
+        ]
+
+        # Determine winner
+        winner_idx, reason = determine_winner(choices)
+        
+        # Update game status
+        game.status = 'completed'
+        game.completed_at = datetime.utcnow()
+        
+        if winner_idx >= 0:
+            # Winner takes all
+            winner = sorted(participants, key=lambda x: x.joined_at)[winner_idx]
+            winner_user = User.query.get(winner.user_id)
+            pot = Decimal(str(game.bet_amount * 3))  # Total pot from all players
+            winner_user.balance += pot
+            
+            # Record transaction
+            transaction = Transaction(
+                user_id=winner_user.id,
+                amount=float(pot),
+                transaction_type='win',
+                status='completed',
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            )
+            db.session.add(transaction)
+        
+        db.session.commit()
+
+        # Create result message
+        choices_display = {
+            'rock': '🗿',
+            'paper': '📄',
+            'scissors': '✂️'
+        }
+        
+        result_message = "🎮 Game Results!\n\n"
+        for i, (name, choice) in enumerate(zip(player_names, choices)):
+            result_message += f"{name}: {choices_display[choice]} {choice.capitalize()}\n"
+        
+        result_message += f"\n{reason}\n"
+        
+        if winner_idx >= 0:
+            winner_name = player_names[winner_idx]
+            result_message += f"\n🎉 {winner_name} won ETB {float(pot):.2f}!"
+        else:
+            result_message += "\n🤝 It's a tie! Bets have been refunded."
+            # Refund all players
+            for p in participants:
+                user = User.query.get(p.user_id)
+                user.balance += Decimal(str(game.bet_amount))
+        
+        return True, result_message
+
+    except Exception as e:
+        db.session.rollback()
+        return False, f"Error processing game result: {str(e)}"
 
 if __name__ == "__main__":
     # Test the simulation
-    output_path, winner, stats = create_rps_simulation()
-    print(f"Simulation completed! GIF saved to: {output_path}")
-    print(f"Winner: {winner}")
-    print(f"Final stats - Rock: {stats[0]}, Paper: {stats[1]}, Scissors: {stats[2]}")
+    gif_path, winner, final_counts = create_rps_simulation(33, 35, 31)
+    print(f"Simulation complete! Winner: {winner}")
+    print(f"Final counts - Rock: {final_counts[0]}, Paper: {final_counts[1]}, Scissors: {final_counts[2]}")

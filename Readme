@@ -11,7 +11,7 @@ source venv/bin/activate
 pip install "python-telegram-bot[all]==20.7" flask flask-sqlalchemy gunicorn psycopg2-binary requests sqlalchemy telegram werkzeug email-validator
 
 # Run the entire application
-python main.py
+python run_bot.py
 Start the Bot
 Open Telegram
 Search for your bot
