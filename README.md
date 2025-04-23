@@ -1,83 +1,111 @@
 # Rock Paper Scissors Telegram Bot
 
-A Telegram bot for playing Rock Paper Scissors with betting functionality.
+A Telegram bot for playing Rock Paper Scissors with real money integration using Chapa Wallet.
 
 ## Features
 
-- Play Rock Paper Scissors with other users
-- Virtual wallet system
-- Deposit and withdraw funds
-- Leaderboard and statistics
-- Admin panel for managing users and transactions
+- 🎮 Play Rock Paper Scissors with real players
+- 💰 Integrated payment system with Chapa Wallet
+- 🏆 Competitive gameplay with prizes
+- 📊 Player statistics and leaderboards
+- 💳 Secure deposit and withdrawal system
 
 ## Setup
 
-1. Clone the repository
-2. Install requirements: `pip install -r requirements.txt`
-3. Create `.env` file with your configuration
-4. Initialize database: `python init_db.py`
-5. Run the bot: `python main.py`
-
-## Environment Variables
-
-Create a `.env` file with the following variables:
-
-## Bot Commands
-
-### Account Commands 🔐
-- `/create_account` - Create your account (first step!)
-- `/balance` - Check your wallet balance
-- `/deposit` - Add funds to your wallet
-- `/withdraw` - Withdraw funds
-- `/delete_account` - Delete your account
-- `/history` - View your game history
-- `/whoami` - Debug command to see your account info
-
-### Game Commands 🎮
-- `/join_game` - Join a match with default bet ($10)
-- `/join_game [amount]` - Join with custom bet amount
-- `/game_status` - Check status of current game
-
-### Stats Commands 📊
-- `/leaderboard` - View top players
-- `/profile` - View your stats
-
-### Help Commands ℹ️
-- `/help` - Show all available commands
-- `/about` - Learn about the bot
-
-## Admin Commands
-
-Admin commands are only available to users whose Telegram ID is in the ADMIN_USERS list in config.py.
-
-- `/admin_stats` - View system statistics
-- `/admin_users` - View and manage users
-- `/admin_games` - View recent games
-- `/admin_withdrawals` - Manage withdrawal requests
-
-## Admin Tool
-
-The admin tool provides command-line utilities for managing the bot:
-
-```
-python admin_tool.py <command> [arguments]
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/rps-telegram-bot.git
+cd rps-telegram-bot
 ```
 
-Available commands:
-- `list_users` - List all users
-- `add_admin <telegram_id>` - Add user to admin list
-- `remove_admin <telegram_id>` - Remove user from admin list
-- `reset_cooldowns <telegram_id>` - Reset cooldowns for a user
-- `clear_games` - Clear all waiting/active games
-- `give_balance <telegram_id> <amount>` - Add balance to a user
-- `create_user <telegram_id> <username>` - Manually create a user
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-## Troubleshooting
+3. Create a `.env` file with your configuration:
+```env
+BOT_TOKEN=your_telegram_bot_token
+CHAPA_SECRET_KEY=your_chapa_secret_key
+CHAPA_PUBLIC_KEY=your_chapa_public_key
+ADMIN_USERS=comma_separated_telegram_ids
+DATABASE_URL=sqlite:///rps_game.db
+```
 
-If you encounter issues with multiple users:
+4. Initialize the database:
+```bash
+python
+>>> from app import db
+>>> db.create_all()
+>>> exit()
+```
 
-1. Check if all users have created accounts with `/create_account`
-2. Use `/whoami` to verify account information
-3. Reset cooldowns if needed: `python admin_tool.py reset_cooldowns <telegram_id>`
-4. Ensure you have correct permissions in config.py
-5. Clear stuck games: `python admin_tool.py clear_games`
+5. Run the bot:
+```bash
+python run_bot.py
+```
+
+## Game Rules
+
+1. Each game requires 3 players
+2. Players make their choice (Rock, Paper, or Scissors)
+3. Winners are determined by standard Rock Paper Scissors rules
+4. Prize distribution:
+   - 1st place: 60% of pot
+   - 2nd place: 20% of pot
+   - 3rd place: 10% of pot
+   - House fee: 10% of pot
+
+## Commands
+
+- `/start` - Start the bot
+- `/account create` - Create a new account
+- `/account info` - View your account info
+- `/account delete` - Delete your account
+- `/wallet` - Manage your wallet
+- `/play [amount]` - Join or create a game
+- `/help` - Show help message
+
+## Payment System
+
+### Deposits
+1. Use `/wallet` command
+2. Select "Deposit"
+3. Enter amount (min: 10 ETB)
+4. Complete payment through Chapa
+
+### Withdrawals
+1. Use `/wallet` command
+2. Select "Withdraw"
+3. Enter amount (min: 50 ETB)
+4. Provide Chapa wallet address
+5. Wait for admin approval
+
+## Development
+
+The project structure:
+```
+├── app.py              # Flask application
+├── config.py           # Configuration settings
+├── models.py           # Database models
+├── payments.py         # Payment system integration
+├── run_bot.py         # Main bot code
+├── requirements.txt    # Dependencies
+└── README.md          # Documentation
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support, contact @YourUsername on Telegram or open an issue on GitHub.
