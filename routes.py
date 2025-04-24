@@ -132,30 +132,30 @@ def register_routes(app):
         if request.method == 'POST':
             try:
                 amount = float(request.form.get('amount', 0))
+                
+                # Use PaymentSystem's validation
+                from payments import PaymentSystem
+                valid, message = PaymentSystem.validate_amount(amount, 'deposit')
+                if not valid:
+                    flash(message, 'danger')
+                    return redirect(url_for('deposit'))
+
+                from payment_service import PaymentService
+                success, message, _ = PaymentService.initialize_payment(user_id, amount, test_mode=True)
+
+                if success:
+                    flash(f'Test deposit of ETB {amount:.2f} completed successfully!', 'success')
+                    return redirect(url_for('profile'))
+                else:
+                    flash(message, 'danger')
+                    return redirect(url_for('deposit'))
+
             except ValueError:
                 flash('Invalid amount.', 'danger')
                 return redirect(url_for('deposit'))
 
-            from payments import PaymentSystem
-            success, result = PaymentSystem.deposit(user_id, amount)
-
-            if not success or isinstance(result, str):
-                flash(result, 'danger')
-                return redirect(url_for('deposit'))
-
-            payment_url = result.get('payment_url', '')
-            payment_id = result.get('payment_id', '')
-            expires_at = result.get('expires_at', '')
-            from datetime import datetime
-            expires_at_formatted = datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S') if expires_at else ''
-
-            return render_template('payment.html', amount=amount, payment_status='pending',
-                                   wallet_address='capa_wallet_deposit_address',
-                                   payment_id=payment_id, payment_url=payment_url,
-                                   expires_at_formatted=expires_at_formatted)
-
         user = User.query.get(user_id)
-        return render_template('deposit.html', user=user)
+        return render_template('deposit.html', user=user, test_mode=True)
 
     @app.route('/withdraw', methods=['GET', 'POST'])
     def withdraw():

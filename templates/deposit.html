@@ -51,6 +51,15 @@
             height: 40px;
             margin-right: 1rem;
         }
+        
+        .test-mode-banner {
+            background-color: #198754;
+            color: white;
+            text-align: center;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -82,20 +91,26 @@
     <!-- Deposit Section -->
     <div class="container my-5">
         <div class="deposit-container">
-            <h1 class="text-center mb-4">Deposit Funds</h1>
-            
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            
             <div class="deposit-card">
+                {% if test_mode %}
+                <div class="test-mode-banner">
+                    <i class="bi bi-info-circle"></i> Test Mode Active - Deposits are Free
+                </div>
+                {% endif %}
+                
+                <h2 class="mb-4">Deposit Funds</h2>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
                 <form action="/deposit" method="POST" id="depositForm">
                     <div class="mb-4">
                         <label for="amount" class="form-label">Current Balance</label>
@@ -147,7 +162,15 @@
                     </div>
                     
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary btn-lg">Deposit Now</button>
+                        {% if test_mode %}
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-plus-circle"></i> Add Test Funds
+                        </button>
+                        {% else %}
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-credit-card"></i> Proceed to Payment
+                        </button>
+                        {% endif %}
                     </div>
                 </form>
             </div>

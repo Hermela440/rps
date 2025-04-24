@@ -277,12 +277,6 @@
                     return;
                 }
                 
-                if (amount > currentBalance) {
-                    event.preventDefault();
-                    alert('Withdrawal amount cannot exceed your available balance.');
-                    return;
-                }
-                
                 const walletAddress = document.getElementById('wallet_address').value.trim();
                 if (!walletAddress) {
                     event.preventDefault();

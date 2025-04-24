@@ -1,0 +1,123 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Game Rooms{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Game Rooms</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Players</th>
+                        <th>Bet Amount</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for room in rooms %}
+                    <tr>
+                        <td>{{ room.id }}</td>
+                        <td>
+                            {{ room.participants|length }}/3
+                            <button type="button" class="btn btn-sm btn-link" data-bs-toggle="modal" data-bs-target="#playersModal{{ room.id }}">
+                                View
+                            </button>
+                        </td>
+                        <td>{{ "%.2f"|format(room.bet_amount) }} ETB</td>
+                        <td>
+                            <span class="badge bg-{{ {
+                                'waiting': 'warning',
+                                'ready': 'info',
+                                'playing': 'primary',
+                                'completed': 'success',
+                                'cancelled': 'danger'
+                            }[room.status] }}">
+                                {{ room.status }}
+                            </span>
+                        </td>
+                        <td>{{ room.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>
+                            {% if room.status in ['waiting', 'ready', 'playing'] %}
+                            <button class="btn btn-sm btn-danger" onclick="closeRoom({{ room.id }})">
+                                Close Room
+                            </button>
+                            {% endif %}
+                            <a href="{{ url_for('admin.room_detail', room_id=room.id) }}" class="btn btn-sm btn-info">
+                                Details
+                            </a>
+                        </td>
+                    </tr>
+                    
+                    <!-- Players Modal -->
+                    <div class="modal fade" id="playersModal{{ room.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Players in Room {{ room.id }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Username</th>
+                                                <th>Choice</th>
+                                                <th>Joined At</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for p in room.participants %}
+                                            <tr>
+                                                <td>{{ p.user.username }}</td>
+                                                <td>{{ p.choice if p.choice else 'Not chosen' }}</td>
+                                                <td>{{ p.joined_at.strftime('%H:%M:%S') }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function closeRoom(roomId) {
+    if (!confirm('Are you sure you want to close this room? All bets will be refunded.')) {
+        return;
+    }
+    
+    $.ajax({
+        url: `/admin/api/room/${roomId}/close`,
+        method: 'POST',
+        success: function(response) {
+            showAlert(response.message);
+            setTimeout(() => location.reload(), 1000);
+        },
+        error: function(xhr) {
+            showAlert(xhr.responseJSON?.message || 'Error closing room', 'danger');
+        }
+    });
+}
+
+// Auto-refresh every minute
+setInterval(function() {
+    location.reload();
+}, 60000);
+</script>
+{% endblock %} 

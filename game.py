@@ -2,227 +2,274 @@ from datetime import datetime
 from sqlalchemy import and_, or_, func
 from app import db
 from models import User, Game, GameParticipant, Transaction
-from config import BET_AMOUNT_DEFAULT, PLATFORM_FEE_PERCENT, LOGGER
+from config import (
+    BET_AMOUNT_DEFAULT, FIXED_BET_AMOUNTS,
+    MIN_DEPOSIT_AMOUNT as MIN_BET_AMOUNT,
+    MAX_DEPOSIT_AMOUNT as MAX_BET_AMOUNT,
+    PLATFORM_FEE_PERCENT, LOGGER
+)
 
+
+class Game(db.Model):
+    """Game model for storing game information"""
+    __tablename__ = 'games'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    bet_amount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), default='waiting')  # waiting, in_progress, completed
+    min_players = db.Column(db.Integer, default=3)
+    max_players = db.Column(db.Integer, default=3)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    
+    # Relationships
+    creator = db.relationship('User', backref='created_games', foreign_keys=[creator_id])
+    participants = db.relationship('GameParticipant', backref='game', lazy=True, cascade='all, delete-orphan')
+
+class GameParticipant(db.Model):
+    """Model for storing game participants and their choices"""
+    __tablename__ = 'game_participants'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    choice = db.Column(db.String(10))  # rock, paper, or scissors
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='game_participations')
 
 class RPSGame:
-    """Rock, Paper, Scissors game logic"""
+    """Game service class for Rock Paper Scissors game logic"""
+    
+    TEST_MODE = True  # Enable test mode for free games
     
     @staticmethod
-    def create_game(bet_amount=BET_AMOUNT_DEFAULT):
-        """Create a new game"""
+    def ensure_test_balance(user_id, minimum_required=1000):
+        """Ensure user has minimum balance in test mode"""
+        if not RPSGame.TEST_MODE:
+            return
+            
+        user = User.query.get(user_id)
+        if not user:
+            return
+            
+        if user.balance < minimum_required:
+            # Give user some test balance
+            user.balance = minimum_required
+            db.session.commit()
+
+    @staticmethod
+    def validate_bet_amount(amount):
+        """Validate bet amount is within allowed range"""
+        if amount < 10:
+            return False, "Minimum bet amount is ETB 10"
+        if amount > 1000:
+            return False, "Maximum bet amount is ETB 1000"
+        return True, "Valid bet amount"
+
+    @staticmethod
+    def create_game(creator_id, bet_amount, min_players=3, max_players=3):
+        """Create a new game and add creator as first participant"""
+        # Ensure creator has enough balance in test mode
+        RPSGame.ensure_test_balance(creator_id)
+        
+        # Validate bet amount
+        valid, message = RPSGame.validate_bet_amount(bet_amount)
+        if not valid:
+            return None
+            
+        # Get creator
+        creator = User.query.get(creator_id)
+        if not creator:
+            return None
+            
+        # Create new game
         game = Game(
+            creator_id=creator_id,
+            bet_amount=bet_amount,
             status='waiting',
-            bet_amount=bet_amount
+            min_players=min_players,
+            max_players=max_players
         )
         db.session.add(game)
+        db.session.flush()
+        
+        # Add creator as first participant
+        participant = GameParticipant(
+            game_id=game.id,
+            user_id=creator_id
+        )
+        db.session.add(participant)
+        
+        # Deduct bet amount from creator's balance
+        creator.balance -= bet_amount
+        
         db.session.commit()
         return game
-    
-    @staticmethod
-    def get_active_game():
-        """Get a game that is waiting for players"""
-        return Game.query.filter_by(status='waiting').first()
-    
+
     @staticmethod
     def join_game(game_id, user_id):
-        """Add a user to a game"""
-        try:
-            # Use session locking to prevent race conditions
-            game = db.session.query(Game).filter_by(id=game_id).with_for_update().first()
-            
-            # Check if user is already in this game
-            existing = GameParticipant.query.filter_by(
-                game_id=game_id,
-                user_id=user_id
-            ).first()
-            
-            if existing:
-                return False, "You have already joined this game."
-            
-            # Check if game is full
-            if not game:
-                return False, "Game not found."
-            
-            if game.status != 'waiting':
-                return False, "This game has already started or has ended."
-            
-            participant_count = GameParticipant.query.filter_by(game_id=game_id).count()
-            if participant_count >= 3:
-                return False, "This game is already full."
-            
-            # Check if user has enough balance
-            user = User.query.get(user_id)
-            if user.balance < game.bet_amount:
-                return False, f"You don't have enough balance. Required: {game.bet_amount}, Your balance: {user.balance}"
-            
-            # Deduct bet amount from user balance
-            user.balance -= game.bet_amount
-            
-            # Create transaction record
-            transaction = Transaction(
-                user_id=user_id,
-                amount=-game.bet_amount,
-                transaction_type='bet',
-                status='completed',
-                reference_id=str(game_id),
-                completed_at=datetime.utcnow()
-            )
-            db.session.add(transaction)
-            
-            # Add user to game
-            participant = GameParticipant(
-                game_id=game_id,
-                user_id=user_id
-            )
-            db.session.add(participant)
-            
-            # Check if game is full after adding this player
-            new_count = participant_count + 1
-            if new_count >= 3:
-                game.status = 'active'
-            
-            db.session.commit()
-            
-            return True, "You have successfully joined the game."
-        except Exception as e:
-            db.session.rollback()
-            LOGGER.error(f"Error joining game: {e}")
-            return False, "Could not join the game. Please try again."
-    
-    @staticmethod
-    def make_choice(game_id, user_id, choice):
-        """Record a player's choice"""
-        if choice not in ['rock', 'paper', 'scissors']:
-            return False, "Invalid choice. Please choose rock, paper, or scissors."
+        """Allow a user to join an existing game"""
+        # Ensure user has enough balance in test mode
+        RPSGame.ensure_test_balance(user_id)
         
         game = Game.query.get(game_id)
         if not game:
-            return False, "Game not found."
+            return False
+            
+        if game.status != 'waiting':
+            return False
+            
+        # Get user
+        user = User.query.get(user_id)
+        if not user:
+            return False
+            
+        # Check if user is already in game
+        existing = GameParticipant.query.filter_by(
+            game_id=game_id, 
+            user_id=user_id
+        ).first()
+        if existing:
+            return False
+            
+        # Check if game is full
+        current_players = GameParticipant.query.filter_by(game_id=game_id).count()
+        if current_players >= game.max_players:
+            return False
+            
+        # Add user as participant
+        participant = GameParticipant(
+            game_id=game_id,
+            user_id=user_id
+        )
+        db.session.add(participant)
         
-        if game.status != 'active':
-            return False, "This game is not active."
+        # Deduct bet amount from user's balance
+        user.balance -= game.bet_amount
         
+        # Update game status if max players reached
+        if current_players + 1 >= game.max_players:
+            game.status = 'in_progress'
+            
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def make_choice(game_id, user_id, choice):
+        """Record a player's choice in the game"""
+        if choice not in ['rock', 'paper', 'scissors']:
+            return False
+            
+        game = Game.query.get(game_id)
+        if not game or game.status != 'in_progress':
+            return False
+            
         participant = GameParticipant.query.filter_by(
             game_id=game_id,
             user_id=user_id
         ).first()
         
         if not participant:
-            return False, "You are not participating in this game."
-        
+            return False
+            
         if participant.choice:
-            return False, "You have already made your choice."
-        
+            return False
+            
         participant.choice = choice
         db.session.commit()
         
-        # Check if all players have made their choices
-        all_chosen = GameParticipant.query.filter_by(
-            game_id=game_id, 
-            choice=None
-        ).count() == 0
+        # Check if all players have made choices
+        all_participants = GameParticipant.query.filter_by(game_id=game_id).all()
         
-        if all_chosen:
-            # Determine winner
-            RPSGame.determine_winner(game_id)
-        
-        return True, f"You have chosen {choice}."
-    
-    @staticmethod
-    def determine_winner(game_id):
-        """Determine the winner of the game"""
-        game = Game.query.get(game_id)
-        if not game or game.status != 'active':
-            return
-        
-        participants = GameParticipant.query.filter_by(game_id=game_id).all()
-        if len(participants) != 3 or any(p.choice is None for p in participants):
-            return  # Game not ready for winner determination
-        
-        # Extract choices
-        choices = [(p.user_id, p.choice) for p in participants]
-        
-        # Count each choice
-        choice_counts = {'rock': 0, 'paper': 0, 'scissors': 0}
-        for _, choice in choices:
-            choice_counts[choice] += 1
-        
-        # Determine winner based on classic RPS rules with 3 players
-        # If all three made different choices, no one wins
-        if choice_counts['rock'] == 1 and choice_counts['paper'] == 1 and choice_counts['scissors'] == 1:
-            winner_id = None  # It's a draw
-        
-        # If all three made the same choice, no one wins
-        elif choice_counts['rock'] == 3 or choice_counts['paper'] == 3 or choice_counts['scissors'] == 3:
-            winner_id = None  # It's a draw
-        
-        # If two players chose the same and one different
-        else:
-            # Find the winning choice
-            if choice_counts['rock'] == 2 and choice_counts['scissors'] == 1:
-                winning_choice = 'rock'  # Rock beats scissors
-            elif choice_counts['paper'] == 2 and choice_counts['rock'] == 1:
-                winning_choice = 'paper'  # Paper beats rock
-            elif choice_counts['scissors'] == 2 and choice_counts['paper'] == 1:
-                winning_choice = 'scissors'  # Scissors beats paper
-            else:
-                winning_choice = None  # This shouldn't happen but just in case
+        if all(p.choice for p in all_participants):
+            RPSGame._determine_winner(game)
             
-            # Find user with winning choice
-            winner_id = next((user_id for user_id, choice in choices if choice == winning_choice), None)
+        return True
+
+    @staticmethod
+    def get_game(game_id):
+        """Get game by ID with all participants"""
+        return Game.query.get(game_id)
+
+    @staticmethod
+    def _determine_winner(game):
+        """Determine winner based on choices"""
+        participants = GameParticipant.query.filter_by(game_id=game.id).all()
+        choices = {p.choice: p.user_id for p in participants}
         
-        # Update game
+        winner_id = None
+        
+        # Find winner using classic RPS rules
+        if 'rock' in choices and 'scissors' in choices:
+            winner_id = choices['rock']
+        elif 'scissors' in choices and 'paper' in choices:
+            winner_id = choices['scissors']
+        elif 'paper' in choices and 'rock' in choices:
+            winner_id = choices['paper']
+            
+        # Update game status
         game.status = 'completed'
-        game.winner_id = winner_id
         game.completed_at = datetime.utcnow()
         
-        # Process winnings
+        # Update winner stats if there is one
         if winner_id:
-            # Winner gets total pot minus platform fee
-            total_pot = game.bet_amount * len(participants)
-            platform_fee = total_pot * (PLATFORM_FEE_PERCENT / 100)
-            winnings = total_pot - platform_fee
-            
             winner = User.query.get(winner_id)
-            winner.balance += winnings
             winner.games_won += 1
+            winner.balance += game.bet_amount * (len(participants) - 1)
             
-            # Create transaction record
-            transaction = Transaction(
-                user_id=winner_id,
-                amount=winnings,
-                transaction_type='win',
-                status='completed',
-                reference_id=str(game_id),
-                completed_at=datetime.utcnow()
-            )
-            db.session.add(transaction)
-        else:
-            # Refund all players if it's a draw
-            for p in participants:
-                user = User.query.get(p.user_id)
-                user.balance += game.bet_amount
-                
-                # Create refund transaction
-                transaction = Transaction(
-                    user_id=p.user_id,
-                    amount=game.bet_amount,
-                    transaction_type='refund',
-                    status='completed',
-                    reference_id=str(game_id),
-                    completed_at=datetime.utcnow()
-                )
-                db.session.add(transaction)
-        
-        # Update games_played for all participants
+        # Update all participants' games played count
         for p in participants:
             user = User.query.get(p.user_id)
             user.games_played += 1
-        
+            if p.user_id != winner_id:
+                user.balance -= game.bet_amount
+                
         db.session.commit()
+        return winner_id
+
+    @staticmethod
+    def _is_winner(choice1, choice2):
+        """Check if choice1 beats choice2"""
+        return (
+            (choice1 == 'rock' and choice2 == 'scissors') or
+            (choice1 == 'scissors' and choice2 == 'paper') or
+            (choice1 == 'paper' and choice2 == 'rock')
+        )
+
+    @staticmethod
+    def is_move_taken(game_id, choice):
+        """Check if a move is already taken in the game"""
+        return GameParticipant.query.filter_by(
+            game_id=game_id,
+            choice=choice
+        ).first() is not None
+
+    @staticmethod
+    def determine_winner(game_id):
+        """Determine the winner of the game"""
+        game = db.session.get(Game, game_id)
+        if not game or game.status != 'playing':
+            return None
         
-        return game
+        participants = GameParticipant.query.filter_by(game_id=game_id).all()
+        if len(participants) != 3 or any(p.choice is None for p in participants):
+            return None  # Game not ready for winner determination
+        
+        # Create mapping of choices to players
+        choices = {p.choice: p for p in participants if p.choice}
+        
+        # Classic RPS rules
+        if 'rock' in choices and 'scissors' in choices:
+            return choices['rock']  # Rock beats Scissors
+        if 'scissors' in choices and 'paper' in choices:
+            return choices['scissors']  # Scissors beats Paper
+        if 'paper' in choices and 'rock' in choices:
+            return choices['paper']  # Paper beats Rock
+            
+        return None  # No clear winner (shouldn't happen with unique moves)
     
     @staticmethod
     def get_user_games(user_id, limit=10):
@@ -330,21 +377,28 @@ class RPSGame:
     @staticmethod
     def find_or_create_game(user_id, bet_amount=BET_AMOUNT_DEFAULT):
         """Find an existing game or create a new one with proper locking to avoid race conditions"""
+        # Validate bet amount first
+        is_valid, message = RPSGame.validate_bet_amount(bet_amount)
+        if not is_valid:
+            return None, message
+            
         user = User.query.get(user_id)
         if not user:
             return None, "User not found."
         
         if user.balance < bet_amount:
-            return None, f"Insufficient balance. You need ${bet_amount:.2f} to play."
+            return None, f"Insufficient balance. You need {bet_amount} coins to play."
         
         try:
-            # First try to find an existing game with the same bet amount
-            available_games = Game.query.filter_by(status='waiting', bet_amount=bet_amount).all()
+            # First try to find an existing game with exactly the same bet amount
+            available_games = Game.query.filter(
+                Game.status == 'waiting',
+                Game.bet_amount == bet_amount
+            ).all()
             
             # Find games that aren't full
             joinable_games = []
             for game in available_games:
-                # Count participants with a separate query to avoid race conditions
                 participant_count = db.session.query(func.count(GameParticipant.id)).filter_by(game_id=game.id).scalar()
                 if participant_count < 3:
                     joinable_games.append((game, participant_count))
@@ -352,31 +406,71 @@ class RPSGame:
             if joinable_games:
                 # Sort by most filled games first to fill games faster
                 joinable_games.sort(key=lambda x: x[1], reverse=True)
-                return joinable_games[0][0], "Found existing game"
-            
-            # If no game with matching bet, try any game the user can afford
-            if bet_amount == BET_AMOUNT_DEFAULT:  # Only auto-join if user is using default bet
-                available_games = Game.query.filter(
-                    Game.status == 'waiting',
-                    Game.bet_amount <= user.balance
-                ).all()
-                
-                joinable_games = []
-                for game in available_games:
-                    participant_count = db.session.query(func.count(GameParticipant.id)).filter_by(game_id=game.id).scalar()
-                    if participant_count < 3:
-                        joinable_games.append((game, participant_count))
-                
-                if joinable_games:
-                    # Sort by most filled games first
-                    joinable_games.sort(key=lambda x: x[1], reverse=True)
-                    return joinable_games[0][0], "Found existing game with different bet"
+                game = joinable_games[0][0]
+                success, message = RPSGame.join_game(game.id, user_id)
+                if success:
+                    return game, "Joined existing game"
+                return None, message
             
             # No suitable game found, create a new one
-            new_game = RPSGame.create_game(bet_amount)
-            return new_game, "Created new game"
+            game, message = RPSGame.create_game(bet_amount, user_id)
+            if game:
+                return game, "Created new room"
+            return None, message
         
         except Exception as e:
             db.session.rollback()
             LOGGER.error(f"Error finding/creating game: {e}")
-            return None, "Error finding or creating game. Please try again."
+            return False, "Error finding or creating game. Please try again."
+
+    @staticmethod
+    def get_game_status(game_id, user_id=None):
+        """Get detailed game status including player choices and results"""
+        game = Game.query.get(game_id)
+        if not game:
+            return None
+        
+        participants = GameParticipant.query.filter_by(game_id=game_id).all()
+        total_players = len(participants)
+        players_ready = len([p for p in participants if p.choice is not None])
+        
+        status_info = {
+            'game_id': game.id,
+            'status': game.status,
+            'bet_amount': float(game.bet_amount),
+            'total_players': total_players,
+            'players_ready': players_ready,
+            'is_completed': game.status == 'completed',
+            'players': []
+        }
+        
+        # Add player information
+        for p in participants:
+            player = User.query.get(p.user_id)
+            player_info = {
+                'user_id': player.id,
+                'username': player.username,
+                'has_chosen': p.choice is not None
+            }
+            
+            # Only show choices if game is completed or if it's the current player
+            if game.status == 'completed' or (user_id and p.user_id == user_id):
+                player_info['choice'] = p.choice
+            
+            if game.status == 'completed':
+                player_info['is_winner'] = game.winner_id == p.user_id
+            
+            status_info['players'].append(player_info)
+        
+        if game.status == 'completed':
+            if game.winner_id:
+                winner = User.query.get(game.winner_id)
+                status_info['winner'] = {
+                    'user_id': winner.id,
+                    'username': winner.username,
+                    'winnings': float(game.bet_amount * 3)
+                }
+            else:
+                status_info['winner'] = None
+        
+        return status_info

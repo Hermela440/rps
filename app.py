@@ -1,19 +1,25 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from decimal import Decimal
 from datetime import datetime, timedelta
-from extensions import db
+from flask_sqlalchemy import SQLAlchemy
 from models import User, Game, GameParticipant, Transaction, WithdrawalRequest
 import os
 
+# Initialize Flask app
 app = Flask(__name__)
 
-# Database configuration
+# Configure database
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rps_game.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_123')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_123')
 
-# Initialize extensions
-db.init_app(app)
+# Initialize database
+db = SQLAlchemy(app)
+
+def init_db():
+    """Initialize the database"""
+    with app.app_context():
+        db.create_all()
 
 @app.route('/')
 def index():
@@ -136,4 +142,5 @@ def admin_dashboard():
                          pending_withdrawals=pending_withdrawals)
 
 if __name__ == '__main__':
+    init_db()
     app.run(debug=True)

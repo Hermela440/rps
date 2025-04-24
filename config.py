@@ -5,6 +5,7 @@ Configuration settings for the RPS Arena application
 import os
 import logging
 from dotenv import load_dotenv
+from datetime import timedelta
 
 # Load environment variables
 load_dotenv()
@@ -23,7 +24,40 @@ logging.basicConfig(
 LOGGER = logging.getLogger(__name__)
 
 # Game settings
-BET_AMOUNT_DEFAULT = 10.0  # Default bet amount in ETB
+MIN_PLAYERS = 3
+MAX_PLAYERS = 3
+FIXED_BET_AMOUNTS = [10, 20, 50, 100]
+BET_AMOUNT_DEFAULT = 10
+
+# Payment settings
+MIN_DEPOSIT_AMOUNT = 10.0
+MAX_DEPOSIT_AMOUNT = 1000.0
+MIN_WITHDRAW_AMOUNT = 20.0
+MAX_WITHDRAW_AMOUNT = 5000.0
+PLATFORM_FEE_PERCENT = 2.0
+
+# Daily limits
+DAILY_DEPOSIT_LIMIT = 5000.0
+DAILY_WITHDRAW_LIMIT = 10000.0
+
+# Chapa payment integration
+CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', 'test_key')
+CHAPA_API_URL = os.getenv('CHAPA_API_URL', 'https://api.chapa.co/v1')
+CURRENCY = 'ETB'
+PAYMENT_TITLE = 'RPS Game Deposit'
+PAYMENT_DESCRIPTION = 'Deposit funds to play Rock Paper Scissors'
+PAYMENT_SUCCESS_URL = 'http://localhost:5000/payment/success'
+PAYMENT_CALLBACK_URL = 'http://localhost:5000/payment/callback'
+
+# Session configuration
+SECRET_KEY = os.getenv('SECRET_KEY', 'dev_key_123')
+PERMANENT_SESSION_LIFETIME = timedelta(days=7)
+
+# Test configuration
+TESTING = True
+WTF_CSRF_ENABLED = False
+
+# Game settings
 MIN_DEPOSIT_AMOUNT = 10.0  # Minimum deposit amount in ETB
 MAX_DEPOSIT_AMOUNT = 1000.0  # Maximum deposit amount in ETB
 MIN_WITHDRAW_AMOUNT = 10.0  # Minimum withdrawal amount in ETB
@@ -37,25 +71,6 @@ WITHDRAW_COOLDOWN = 300
 JOIN_GAME_COOLDOWN = 30
 SIMULATE_COOLDOWN = 30
 
-# Game settings
-BET_AMOUNT_DEFAULT = 10.0
-MIN_BET_AMOUNT = 5.0
-MAX_BET_AMOUNT = 1000.0
-PLATFORM_FEE_PERCENT = 5.0
-
-# Payment settings
-MIN_DEPOSIT_AMOUNT = 10.0
-MAX_DEPOSIT_AMOUNT = 10000.0
-MIN_WITHDRAW_AMOUNT = 50.0
-MAX_WITHDRAW_AMOUNT = 5000.0
-
-# Cooldown settings (in seconds) - reduced for better testing
-CREATE_ACCOUNT_COOLDOWN = 10  # Was 86400 (24 hours)
-DELETE_ACCOUNT_COOLDOWN = 10  # Was 86400 (24 hours)
-DEPOSIT_COOLDOWN = 10  # Was 300 (5 minutes)
-WITHDRAW_COOLDOWN = 10  # Was 3600 (1 hour)
-JOIN_GAME_COOLDOWN = 10  # Was 60 (1 minute)
-
 # Application URLs
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000")
 PAYMENT_SUCCESS_URL = f"{BASE_URL}/payment/success"
@@ -64,6 +79,8 @@ PAYMENT_WEBHOOK_URL = f"{BASE_URL}/api/payment/webhook"
 
 # Database settings
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///rps_game.db')
+SQLALCHEMY_DATABASE_URI = DATABASE_URL
+SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Debug mode
 DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
@@ -84,8 +101,6 @@ if not CAPA_API_KEY or not CAPA_SECRET_KEY:
 
 # Chapa API settings
 CHAPA_API_KEY = "CHASECK_TEST-WQATsMezrNPxr8bsVH1TAGwAfDBofhqq"
-CHAPA_API_URL = "https://api.chapa.co/v1"
-CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY')
 CHAPA_PUBLIC_KEY = os.getenv('CHAPA_PUBLIC_KEY')
 
 # Transaction Limits
@@ -93,16 +108,6 @@ MIN_DEPOSIT = 10  # ETB
 MAX_DEPOSIT = 10000  # ETB
 MIN_WITHDRAW = 50  # ETB
 MAX_WITHDRAW = 5000  # ETB
-DAILY_DEPOSIT_LIMIT = 20000  # ETB
-DAILY_WITHDRAW_LIMIT = 10000  # ETB
-
-# Prize Distribution
-PRIZE_DISTRIBUTION = {
-    'winner': 0.60,  # 60% to winner
-    'second': 0.20,  # 20% to second place
-    'third': 0.10,   # 10% to third place
-    'house': 0.10    # 10% house fee
-}
 
 # Game States
 GAME_STATES = {
@@ -151,3 +156,8 @@ logging.basicConfig(
 )
 
 LOGGER = logging.getLogger(__name__)
+
+def generate_transaction_ref():
+    """Generate a unique transaction reference"""
+    import uuid
+    return f"TX-{uuid.uuid4().hex[:12].upper()}"

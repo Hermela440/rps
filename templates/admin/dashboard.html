@@ -1,0 +1,151 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Dashboard</h1>
+
+<div class="row">
+    <!-- Active Rooms -->
+    <div class="col-md-4">
+        <div class="stats-card">
+            <h3 class="text-primary">{{ stats.active_rooms }}</h3>
+            <p class="text-muted mb-0">Active Rooms</p>
+        </div>
+    </div>
+    
+    <!-- Total Players -->
+    <div class="col-md-4">
+        <div class="stats-card">
+            <h3 class="text-success">{{ stats.total_players }}</h3>
+            <p class="text-muted mb-0">Total Players</p>
+        </div>
+    </div>
+    
+    <!-- Active Players -->
+    <div class="col-md-4">
+        <div class="stats-card">
+            <h3 class="text-info">{{ stats.active_players }}</h3>
+            <p class="text-muted mb-0">Active Players</p>
+        </div>
+    </div>
+    
+    <!-- Total Bets Today -->
+    <div class="col-md-4">
+        <div class="stats-card">
+            <h3 class="text-warning">{{ "%.2f"|format(stats.total_bets_today) }}</h3>
+            <p class="text-muted mb-0">Total Bets Today (ETB)</p>
+        </div>
+    </div>
+    
+    <!-- Pending Transactions -->
+    <div class="col-md-4">
+        <div class="stats-card">
+            <h3 class="text-warning">{{ stats.pending_transactions }}</h3>
+            <p class="text-muted mb-0">Pending Transactions</p>
+        </div>
+    </div>
+    
+    <!-- Failed Transactions -->
+    <div class="col-md-4">
+        <div class="stats-card">
+            <h3 class="text-danger">{{ stats.failed_transactions }}</h3>
+            <p class="text-muted mb-0">Failed Transactions</p>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Recent Games</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Room ID</th>
+                                <th>Players</th>
+                                <th>Bet Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for game in games %}
+                            <tr>
+                                <td>{{ game.id }}</td>
+                                <td>{{ game.participants|length }}/3</td>
+                                <td>{{ "%.2f"|format(game.bet_amount) }}</td>
+                                <td>
+                                    <span class="badge bg-{{ {
+                                        'waiting': 'warning',
+                                        'ready': 'info',
+                                        'playing': 'primary',
+                                        'completed': 'success',
+                                        'cancelled': 'danger'
+                                    }[game.status] }}">
+                                        {{ game.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Recent Transactions</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>User</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in transactions %}
+                            <tr>
+                                <td>{{ tx.id }}</td>
+                                <td>{{ tx.user.username }}</td>
+                                <td>{{ "%.2f"|format(tx.amount) }}</td>
+                                <td>
+                                    <span class="badge bg-{{ {
+                                        'pending': 'warning',
+                                        'completed': 'success',
+                                        'failed': 'danger'
+                                    }[tx.status] }}">
+                                        {{ tx.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh dashboard every 30 seconds
+    setInterval(function() {
+        location.reload();
+    }, 30000);
+</script>
+{% endblock %} 
