@@ -1,27 +1,26 @@
 # Core dependencies
-Flask==3.0.2
-Flask-SQLAlchemy==3.1.1
-SQLAlchemy==2.0.28
-Werkzeug==2.0.1
+Flask==2.2.5
+Flask-SQLAlchemy==3.0.2
+SQLAlchemy==2.0.25
+Werkzeug==2.2.3
 requests==2.31.0
 
 # Telegram Bot
-python-telegram-bot==20.7
+python-telegram-bot==20.3
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv==0.21.1
 pytz==2021.1
 
 # Game-specific
 Pillow>=8.0.0
 numpy>=1.21.0
-pygame==2.5.2
 
 # Production (optional)
 gunicorn==21.2.0
 
 # Scheduler
-APScheduler>=3.8.1
+APScheduler==3.6.3
 
 # Misc dependencies
 certifi>=2021.5.30
@@ -33,7 +32,7 @@ itsdangerous>=2.0.1
 Jinja2>=3.0.1
 MarkupSafe>=2.0.1
 typing_extensions>=3.10.0.2
-urllib3>=1.26.6
+urllib3==1.26.16
 zipp>=3.5.0
 
 # Visualization
@@ -46,4 +45,4 @@ pytest-mock==3.11.1
 
 # Development
 black==23.3.0
-flake8==6.0.0
+flake8==5.0.4

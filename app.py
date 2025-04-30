@@ -1,26 +1,88 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from decimal import Decimal
 from datetime import datetime, timedelta
-from flask_sqlalchemy import SQLAlchemy
-from models import User, Game, GameParticipant, Transaction, WithdrawalRequest
+from sqlalchemy import text
+from extensions import db, migrate
 import os
+import logging
 
-# Initialize Flask app
-app = Flask(__name__)
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+LOGGER = logging.getLogger(__name__)
 
-# Configure database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rps_game.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_123')
+def create_app():
+    """Create and configure the Flask application"""
+    app = Flask(__name__)
+    
+    # Configure database
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rps_game.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {'check_same_thread': False}  # Required for SQLite
+    }
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_123')
+    
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
+    
+    return app
 
-# Initialize database
-db = SQLAlchemy(app)
+# Create the Flask application
+app = create_app()
+
+# Import models after db initialization to avoid circular imports
+from models import User, Room, RoomPlayer, Transaction, WithdrawalRequest, DailyStats, Cooldown
 
 def init_db():
     """Initialize the database"""
-    with app.app_context():
-        db.create_all()
+    try:
+        # Create database directory if it doesn't exist
+        db_dir = os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', ''))
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+            LOGGER.info("Created database directory")
+        
+        # Drop all tables if they exist
+        with app.app_context():
+            db.drop_all()
+            LOGGER.info("Dropped existing tables")
+        
+        # Create all tables
+        with app.app_context():
+            db.create_all()
+            LOGGER.info("Created all tables")
+            
+            # Test database connection
+            db.session.execute(text('SELECT 1'))
+            LOGGER.info("Database connection test successful")
+            
+            # Create initial admin user if none exists
+            admin = User.query.filter_by(is_admin=True).first()
+            if not admin:
+                admin = User(
+                    telegram_id=123456789,  # Replace with actual admin Telegram ID
+                    username='admin',
+                    balance=0.0,
+                    wins=0,
+                    losses=0,
+                    is_admin=True,
+                    created_at=datetime.utcnow()
+                )
+                db.session.add(admin)
+                db.session.commit()
+                LOGGER.info("Initial admin user created")
+            
+            LOGGER.info("Database initialized successfully")
+            
+    except Exception as e:
+        LOGGER.error(f"Failed to initialize database: {e}")
+        raise
 
+# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -122,7 +184,7 @@ def withdraw():
 def admin_dashboard():
     # Get system stats
     total_users = User.query.count()
-    total_games = Game.query.count()
+    total_games = Room.query.count()
     total_volume = db.session.query(db.func.sum(Transaction.amount)).filter(
         Transaction.status == 'completed',
         Transaction.transaction_type.in_(['deposit', 'withdraw'])
@@ -142,5 +204,6 @@ def admin_dashboard():
                          pending_withdrawals=pending_withdrawals)
 
 if __name__ == '__main__':
-    init_db()
+    with app.app_context():
+        init_db()  # Initialize database only when running the app directly
     app.run(debug=True)

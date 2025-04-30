@@ -1,111 +1,118 @@
-# Rock Paper Scissors Telegram Bot
+# Rock Paper Scissors Game Bot
 
-A Telegram bot for playing Rock Paper Scissors with real money integration using Chapa Wallet.
+A Telegram bot for playing Rock Paper Scissors with betting functionality. Players can create rooms, join games, and win prizes.
 
-## Features
+## Prerequisites
 
-- 🎮 Play Rock Paper Scissors with real players
-- 💰 Integrated payment system with Chapa Wallet
-- 🏆 Competitive gameplay with prizes
-- 📊 Player statistics and leaderboards
-- 💳 Secure deposit and withdrawal system
+- Python 3.7 or higher
+- pip (Python package manager)
+- A Telegram bot token (get from [@BotFather](https://t.me/BotFather))
 
-## Setup
+## Installation Steps
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/rps-telegram-bot.git
-cd rps-telegram-bot
+git clone <repository-url>
+cd rps
 ```
 
-2. Install dependencies:
+2. Create and activate a virtual environment:
+```bash
+# Windows
+python -m venv venv37
+.\venv37\Scripts\activate
+
+# Linux/Mac
+python3 -m venv venv37
+source venv37/bin/activate
+```
+
+3. Install required packages:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Create a `.env` file with your configuration:
-```env
-BOT_TOKEN=your_telegram_bot_token
-CHAPA_SECRET_KEY=your_chapa_secret_key
-CHAPA_PUBLIC_KEY=your_chapa_public_key
-ADMIN_USERS=comma_separated_telegram_ids
-DATABASE_URL=sqlite:///rps_game.db
-```
-
-4. Initialize the database:
+4. Set up environment variables:
 ```bash
-python
->>> from app import db
->>> db.create_all()
->>> exit()
+# Windows PowerShell
+$env:TELEGRAM_BOT_TOKEN="your_bot_token_here"
+
+# Windows Command Prompt
+set TELEGRAM_BOT_TOKEN=your_bot_token_here
+
+# Linux/Mac
+export TELEGRAM_BOT_TOKEN=your_bot_token_here
 ```
 
-5. Run the bot:
+## Running the Bot
+
+1. Start the bot:
 ```bash
 python run_bot.py
 ```
 
+2. Open Telegram and search for your bot username
+3. Start a chat with the bot by clicking "Start" or sending `/start`
+
+## How to Play
+
+1. **Create Account**
+   - Send `/start` to create your account
+   - Use `/deposit` to add funds to your wallet
+
+2. **Create a Room**
+   - Use `/create_room <amount>` to create a new game room
+   - Example: `/create_room 100` creates a room with 100 ETB bet
+
+3. **Join a Game**
+   - Use `/join_game <room_code> <bet_amount>` to join a room
+   - Example: `/join_game ABC12 100` joins room ABC12 with 100 ETB bet
+
+4. **Game Flow**
+   - Wait for 3 players to join
+   - When full, the game starts automatically
+   - Choose your move (Rock 🪨, Paper 📄, or Scissors ✂️)
+   - Winner takes 95% of the pot
+
+5. **Other Commands**
+   - `/balance` - Check your wallet balance
+   - `/game_status` - Check current game status
+   - `/leave_room` - Leave current room
+   - `/history` - View your game history
+   - `/leaderboard` - See top players
+   - `/help` - Show all commands
+
+## Betting Rules
+
+- Minimum bet: 10 ETB
+- Maximum bet: 1000 ETB
+- Winner takes 95% of the pot
+- House fee: 5%
+
 ## Game Rules
 
-1. Each game requires 3 players
-2. Players make their choice (Rock, Paper, or Scissors)
-3. Winners are determined by standard Rock Paper Scissors rules
-4. Prize distribution:
-   - 1st place: 60% of pot
-   - 2nd place: 20% of pot
-   - 3rd place: 10% of pot
-   - House fee: 10% of pot
+1. Three players required to start
+2. Each player makes one move
+3. Rock beats Scissors
+4. Scissors beats Paper
+5. Paper beats Rock
+6. If all players choose the same move, it's a draw
+7. In case of a draw, the pot is split between winners
 
-## Commands
+## Troubleshooting
 
-- `/start` - Start the bot
-- `/account create` - Create a new account
-- `/account info` - View your account info
-- `/account delete` - Delete your account
-- `/wallet` - Manage your wallet
-- `/play [amount]` - Join or create a game
-- `/help` - Show help message
+If you encounter any issues:
 
-## Payment System
+1. Check if the bot is running
+2. Verify your Telegram bot token is correct
+3. Ensure you have sufficient balance
+4. Make sure you're not already in a room
+5. Check if the room code is correct
 
-### Deposits
-1. Use `/wallet` command
-2. Select "Deposit"
-3. Enter amount (min: 10 ETB)
-4. Complete payment through Chapa
+## Support
 
-### Withdrawals
-1. Use `/wallet` command
-2. Select "Withdraw"
-3. Enter amount (min: 50 ETB)
-4. Provide Chapa wallet address
-5. Wait for admin approval
-
-## Development
-
-The project structure:
-```
-├── app.py              # Flask application
-├── config.py           # Configuration settings
-├── models.py           # Database models
-├── payments.py         # Payment system integration
-├── run_bot.py         # Main bot code
-├── requirements.txt    # Dependencies
-└── README.md          # Documentation
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+For support or bug reports, please contact the bot administrator.
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For support, contact @YourUsername on Telegram or open an issue on GitHub.

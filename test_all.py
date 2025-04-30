@@ -1,18 +1,15 @@
 import unittest
 from datetime import datetime
 from game import RPSGame, Game, GameParticipant
-from user import User
+from models import User, Game, GameParticipant, Transaction, WithdrawalRequest, DailyStats, Cooldown
 from payment_service import PaymentService
 from battle_simulation import VisualBattleSimulation
-from app import app, db
+from app import app
+from extensions import db
 from models import (
     User as UserModel,
     Game as GameModel,
     GameParticipant as GameParticipantModel,
-    Transaction,
-    WithdrawalRequest,
-    DailyStats,
-    Cooldown
 )
 import pygame
 import os
@@ -24,35 +21,47 @@ class TestRPSSystem(unittest.TestCase):
         self.app = app
         self.app.config['TESTING'] = True
         self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-        self.client = self.app.test_client()
+        self.app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        
+        # Push the app context
         self.ctx = self.app.app_context()
         self.ctx.push()
         
+        # Initialize the database
+        db.init_app(self.app)
+        
         # Create all tables
-        db.create_all()
+        with self.app.app_context():
+            db.create_all()
+            
+            # Create test users
+            self.user1 = User(username="player1", telegram_id=1001, balance=100.0)
+            self.user2 = User(username="player2", telegram_id=1002, balance=100.0)
+            self.user3 = User(username="player3", telegram_id=1003, balance=100.0)
+            
+            # Add users to database
+            db.session.add(self.user1)
+            db.session.add(self.user2)
+            db.session.add(self.user3)
+            db.session.commit()
         
         # Enable test mode for payments
         PaymentService.set_test_mode(True)
-        
-        # Create test users
-        self.user1 = User(username="player1", balance=100.0)
-        self.user2 = User(username="player2", balance=100.0)
-        self.user3 = User(username="player3", balance=100.0)
-        
-        # Add users to database
-        db.session.add(self.user1)
-        db.session.add(self.user2)
-        db.session.add(self.user3)
-        db.session.commit()
     
     def tearDown(self):
         """Clean up after each test"""
         db.session.remove()
-        db.drop_all()
+        with self.app.app_context():
+            db.drop_all()
         self.ctx.pop()
 
     def test_game_creation(self):
         """Test game creation and joining"""
+        # Reattach users to session
+        self.user1 = db.session.merge(self.user1)
+        self.user2 = db.session.merge(self.user2)
+        self.user3 = db.session.merge(self.user3)
+        
         # Create a new game
         game = RPSGame.create_game(
             creator_id=self.user1.id,
@@ -79,6 +88,11 @@ class TestRPSSystem(unittest.TestCase):
     
     def test_game_choices(self):
         """Test making choices in the game"""
+        # Reattach users to session
+        self.user1 = db.session.merge(self.user1)
+        self.user2 = db.session.merge(self.user2)
+        self.user3 = db.session.merge(self.user3)
+        
         game = RPSGame.create_game(
             creator_id=self.user1.id,
             bet_amount=10,
@@ -104,6 +118,11 @@ class TestRPSSystem(unittest.TestCase):
     
     def test_payment_system(self):
         """Test payment system in test mode"""
+        # Reattach users to session
+        self.user1 = db.session.merge(self.user1)
+        self.user2 = db.session.merge(self.user2)
+        self.user3 = db.session.merge(self.user3)
+        
         initial_balance = float(self.user1.balance)
         
         # Enable test mode for payments

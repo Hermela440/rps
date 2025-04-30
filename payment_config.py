@@ -1,5 +1,5 @@
 """Payment gateway configuration"""
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import uuid
 
 # Chapa Configuration
@@ -20,6 +20,6 @@ PAYMENT_CALLBACK_URL = f"{BASE_URL}/payment/callback"
 
 def generate_transaction_ref():
     """Generate a unique transaction reference"""
-    timestamp = datetime.now(UTC).strftime('%Y%m%d%H%M%S')
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
     unique_id = uuid.uuid4().hex[:8]
     return f"RPS-{timestamp}-{unique_id}" 

@@ -109,13 +109,20 @@ MAX_DEPOSIT = 10000  # ETB
 MIN_WITHDRAW = 50  # ETB
 MAX_WITHDRAW = 5000  # ETB
 
-# Game States
+# Game states
 GAME_STATES = {
     'WAITING': 'waiting',
-    'STARTING': 'starting',
     'IN_PROGRESS': 'in_progress',
     'COMPLETED': 'completed',
     'CANCELLED': 'cancelled'
+}
+
+# Prize distribution
+PRIZE_DISTRIBUTION = {
+    'winner': 0.60,  # 60% to winner
+    'second': 0.20,  # 20% to second place
+    'third': 0.10,   # 10% to third place
+    'house': 0.10    # 10% house fee
 }
 
 # Logging Configuration

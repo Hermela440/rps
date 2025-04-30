@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import and_, or_, func
-from app import db
+from extensions import db
 from models import User, Game, GameParticipant, Transaction
 from config import (
     BET_AMOUNT_DEFAULT, FIXED_BET_AMOUNTS,
@@ -9,49 +9,18 @@ from config import (
     PLATFORM_FEE_PERCENT, LOGGER
 )
 
-
-class Game(db.Model):
-    """Game model for storing game information"""
-    __tablename__ = 'games'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    bet_amount = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(20), default='waiting')  # waiting, in_progress, completed
-    min_players = db.Column(db.Integer, default=3)
-    max_players = db.Column(db.Integer, default=3)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    completed_at = db.Column(db.DateTime)
-    
-    # Relationships
-    creator = db.relationship('User', backref='created_games', foreign_keys=[creator_id])
-    participants = db.relationship('GameParticipant', backref='game', lazy=True, cascade='all, delete-orphan')
-
-class GameParticipant(db.Model):
-    """Model for storing game participants and their choices"""
-    __tablename__ = 'game_participants'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    choice = db.Column(db.String(10))  # rock, paper, or scissors
-    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    user = db.relationship('User', backref='game_participations')
-
 class RPSGame:
     """Game service class for Rock Paper Scissors game logic"""
     
     TEST_MODE = True  # Enable test mode for free games
     
     @staticmethod
-    def ensure_test_balance(user_id, minimum_required=1000):
+    def ensure_test_balance(user_id, minimum_required=100):
         """Ensure user has minimum balance in test mode"""
         if not RPSGame.TEST_MODE:
             return
             
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return
             
@@ -81,7 +50,7 @@ class RPSGame:
             return None
             
         # Get creator
-        creator = User.query.get(creator_id)
+        creator = db.session.get(User, creator_id)
         if not creator:
             return None
             
@@ -115,7 +84,7 @@ class RPSGame:
         # Ensure user has enough balance in test mode
         RPSGame.ensure_test_balance(user_id)
         
-        game = Game.query.get(game_id)
+        game = db.session.get(Game, game_id)
         if not game:
             return False
             
@@ -123,7 +92,7 @@ class RPSGame:
             return False
             
         # Get user
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return False
             
@@ -163,7 +132,7 @@ class RPSGame:
         if choice not in ['rock', 'paper', 'scissors']:
             return False
             
-        game = Game.query.get(game_id)
+        game = db.session.get(Game, game_id)
         if not game or game.status != 'in_progress':
             return False
             
@@ -192,7 +161,7 @@ class RPSGame:
     @staticmethod
     def get_game(game_id):
         """Get game by ID with all participants"""
-        return Game.query.get(game_id)
+        return db.session.get(Game, game_id)
 
     @staticmethod
     def _determine_winner(game):
@@ -216,13 +185,13 @@ class RPSGame:
         
         # Update winner stats if there is one
         if winner_id:
-            winner = User.query.get(winner_id)
+            winner = db.session.get(User, winner_id)
             winner.games_won += 1
             winner.balance += game.bet_amount * (len(participants) - 1)
             
         # Update all participants' games played count
         for p in participants:
-            user = User.query.get(p.user_id)
+            user = db.session.get(User, p.user_id)
             user.games_played += 1
             if p.user_id != winner_id:
                 user.balance -= game.bet_amount
