@@ -1,5 +1,5 @@
 """Admin panel routes and views"""
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import func
@@ -30,8 +30,8 @@ def login():
 def dashboard():
     """Admin dashboard with overview"""
     # Get today's stats
-    today = datetime.now(UTC).date()
-    today_start = datetime.combine(today, datetime.min.time().replace(tzinfo=UTC))
+    today = datetime.now(timezone.utc).date()
+    today_start = datetime.combine(today, datetime.min.time().replace(tzinfo=timezone.utc))
     
     stats = {
         'active_rooms': Game.query.filter(Game.status.in_(['waiting', 'ready', 'playing'])).count(),
@@ -108,12 +108,12 @@ def api_close_room(room_id):
                 transaction_type='refund',
                 status='completed',
                 reference_id=f"admin_close_{room.id}",
-                completed_at=datetime.now(UTC)
+                completed_at=datetime.now(timezone.utc)
             )
             db.session.add(transaction)
     
     room.status = 'cancelled'
-    room.completed_at = datetime.now(UTC)
+    room.completed_at = datetime.now(timezone.utc)
     db.session.commit()
     
     return jsonify({'status': 'success', 'message': 'Room closed successfully'})

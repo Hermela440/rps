@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Complete{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Payment Complete</h3>
+                </div>
+                <div class="card-body text-center">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                    <h4 class="mt-3">Thank you for your payment!</h4>
+                    <p class="text-muted">Your deposit has been processed successfully.</p>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">Return to Home</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

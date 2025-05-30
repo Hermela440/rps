@@ -41,13 +41,21 @@ DAILY_DEPOSIT_LIMIT = 5000.0
 DAILY_WITHDRAW_LIMIT = 10000.0
 
 # Chapa payment integration
-CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', 'test_key')
+CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', 'CHASECK_TEST-kydKbZsYn929T2WcSmjNaNXj3TBdVCLG')
 CHAPA_API_URL = os.getenv('CHAPA_API_URL', 'https://api.chapa.co/v1')
 CURRENCY = 'ETB'
 PAYMENT_TITLE = 'RPS Game Deposit'
 PAYMENT_DESCRIPTION = 'Deposit funds to play Rock Paper Scissors'
-PAYMENT_SUCCESS_URL = 'http://localhost:5000/payment/success'
-PAYMENT_CALLBACK_URL = 'http://localhost:5000/payment/callback'
+# Get base URL from environment or use a default
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:5000')
+PAYMENT_SUCCESS_URL = f"{BASE_URL}/payment/success"
+PAYMENT_CALLBACK_URL = f"{BASE_URL}/payment/callback"
+
+# Test mode settings
+TEST_MODE = os.getenv('TEST_MODE', 'True').lower() == 'true'
+if TEST_MODE:
+    CHAPA_API_URL = "https://api.chapa.co/v1/test"
+    CHAPA_SECRET_KEY = "CHASECK_TEST-kydKbZsYn929T2WcSmjNaNXj3TBdVCLG"
 
 # Session configuration
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev_key_123')
@@ -56,6 +64,19 @@ PERMANENT_SESSION_LIFETIME = timedelta(days=7)
 # Test configuration
 TESTING = True
 WTF_CSRF_ENABLED = False
+SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'  # Use in-memory database for tests
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+# Test mode settings
+TEST_MODE = True
+CHAPA_SECRET_KEY = "CHASECK_TEST-kydKbZsYn929T2WcSmjNaNXj3TBdVCLG"
+CHAPA_API_URL = "https://api.chapa.co/v1/test"
+WEBHOOK_URL = "http://localhost:5000/test/webhook"
+
+# Test user settings
+TEST_USER_BALANCE = 1000.0
+TEST_MIN_DEPOSIT = 10.0
+TEST_MAX_DEPOSIT = 1000.0
 
 # Game settings
 MIN_DEPOSIT_AMOUNT = 10.0  # Minimum deposit amount in ETB
@@ -168,3 +189,37 @@ def generate_transaction_ref():
     """Generate a unique transaction reference"""
     import uuid
     return f"TX-{uuid.uuid4().hex[:12].upper()}"
+
+class Config:
+    # Flask settings
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev_key_123')
+    
+    # Database settings
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///rps_game.db')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'connect_args': {'check_same_thread': False}  # Required for SQLite
+    }
+    
+    # Payment settings
+    TEST_MODE = True
+    CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', 'CHASECK_TEST-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+    CHAPA_API_URL = 'https://api.chapa.co/v1/transaction/initialize'
+    BASE_URL = os.getenv('BASE_URL', 'http://localhost:5000')
+    PAYMENT_SUCCESS_URL = f"{BASE_URL}/payment/success"
+    PAYMENT_CALLBACK_URL = f"{BASE_URL}/payment/callback"
+    
+    # Game settings
+    MIN_BET_AMOUNT = 10
+    MAX_BET_AMOUNT = 1000
+    HOUSE_EDGE = 0.05  # 5% house edge
+    
+    # Admin settings
+    ADMIN_USERS = [123456789]  # List of admin Telegram IDs
+    
+    # Logging settings
+    LOG_LEVEL = 'INFO'
+    LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    
+    # Session settings
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)

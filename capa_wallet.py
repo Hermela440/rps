@@ -9,20 +9,200 @@ import time
 import logging
 import requests
 from datetime import datetime
-from config import LOGGER
+from config import (
+    CAPA_API_URL,
+    CAPA_API_KEY,
+    CAPA_SECRET_KEY,
+    CURRENCY,
+    PAYMENT_CALLBACK_URL,
+    PAYMENT_SUCCESS_URL
+)
+from typing import Dict, Tuple, Optional
 
 # Configuration for Capa Wallet API
-CAPA_API_URL = os.environ.get("CAPA_API_URL", "https://api.capawallet.com/v1")
-CAPA_API_KEY = os.environ.get("CAPA_API_KEY", "")
-CAPA_SECRET_KEY = os.environ.get("CAPA_SECRET_KEY", "")
+LOGGER = logging.getLogger(__name__)
 
 # Check if API keys are properly set
 if not CAPA_API_KEY or not CAPA_SECRET_KEY:
     LOGGER.warning("Capa Wallet API keys not configured. Using mock payment system.")
 
 class CapaWallet:
-    """Capa Wallet Payment Gateway Integration"""
+    """Capa Wallet integration class"""
     
+    def __init__(self, api_key: str = CAPA_API_KEY, secret_key: str = CAPA_SECRET_KEY):
+        self.api_key = api_key
+        self.secret_key = secret_key
+        self.base_url = CAPA_API_URL
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "X-Secret-Key": secret_key,
+            "Content-Type": "application/json"
+        }
+
+    def create_wallet(self, user_id: str, email: str) -> Tuple[bool, str, Optional[Dict]]:
+        """Create a new Capa wallet for a user"""
+        try:
+            payload = {
+                "user_id": user_id,
+                "email": email,
+                "currency": CURRENCY
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/wallets/create",
+                json=payload,
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return True, "Wallet created successfully", data["data"]
+            
+            return False, "Failed to create wallet", None
+
+        except Exception as e:
+            LOGGER.error(f"Error creating wallet: {str(e)}")
+            return False, f"Error: {str(e)}", None
+
+    def get_wallet_balance(self, wallet_id: str) -> Tuple[bool, str, Optional[float]]:
+        """Get wallet balance"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/wallets/{wallet_id}/balance",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return True, "Balance retrieved successfully", float(data["data"]["balance"])
+            
+            return False, "Failed to get wallet balance", None
+
+        except Exception as e:
+            LOGGER.error(f"Error getting wallet balance: {str(e)}")
+            return False, f"Error: {str(e)}", None
+
+    def initialize_deposit(
+        self,
+        wallet_id: str,
+        amount: float,
+        tx_ref: str
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Initialize a deposit transaction"""
+        try:
+            payload = {
+                "wallet_id": wallet_id,
+                "amount": str(amount),
+                "currency": CURRENCY,
+                "tx_ref": tx_ref,
+                "callback_url": PAYMENT_CALLBACK_URL,
+                "return_url": PAYMENT_SUCCESS_URL
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/deposits/initialize",
+                json=payload,
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return True, "Deposit initialized", data["data"]["checkout_url"]
+            
+            return False, "Failed to initialize deposit", None
+
+        except Exception as e:
+            LOGGER.error(f"Error initializing deposit: {str(e)}")
+            return False, f"Error: {str(e)}", None
+
+    def process_withdrawal(
+        self,
+        wallet_id: str,
+        amount: float,
+        bank_details: Dict[str, str]
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Process a withdrawal request"""
+        try:
+            payload = {
+                "wallet_id": wallet_id,
+                "amount": str(amount),
+                "currency": CURRENCY,
+                "bank_name": bank_details.get("bank_name"),
+                "account_number": bank_details.get("account_number"),
+                "account_name": bank_details.get("account_name"),
+                "bank_branch": bank_details.get("bank_branch")
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/withdrawals/process",
+                json=payload,
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return True, "Withdrawal processed", data["data"]["reference"]
+            
+            return False, "Failed to process withdrawal", None
+
+        except Exception as e:
+            LOGGER.error(f"Error processing withdrawal: {str(e)}")
+            return False, f"Error: {str(e)}", None
+
+    def verify_transaction(self, tx_ref: str) -> Tuple[bool, str, Optional[Dict]]:
+        """Verify a transaction status"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/transactions/verify/{tx_ref}",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return True, "Transaction verified", data["data"]
+            
+            return False, "Transaction verification failed", None
+
+        except Exception as e:
+            LOGGER.error(f"Error verifying transaction: {str(e)}")
+            return False, f"Error: {str(e)}", None
+
+    def get_transaction_history(
+        self,
+        wallet_id: str,
+        limit: int = 10,
+        offset: int = 0
+    ) -> Tuple[bool, str, Optional[list]]:
+        """Get wallet transaction history"""
+        try:
+            params = {
+                "wallet_id": wallet_id,
+                "limit": limit,
+                "offset": offset
+            }
+            
+            response = requests.get(
+                f"{self.base_url}/transactions/history",
+                params=params,
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return True, "History retrieved", data["data"]["transactions"]
+            
+            return False, "Failed to get transaction history", None
+
+        except Exception as e:
+            LOGGER.error(f"Error getting transaction history: {str(e)}")
+            return False, f"Error: {str(e)}", None
+
     @staticmethod
     def generate_payment_link(amount, user_id, description=None):
         """
@@ -131,66 +311,6 @@ class CapaWallet:
             LOGGER.error(f"Error verifying Capa Wallet payment: {str(e)}")
             return False, False, f"Payment verification unavailable: {str(e)}"
     
-    @staticmethod
-    def process_withdrawal(user_id, amount, wallet_address, description=None):
-        """
-        Process a withdrawal to a Capa Wallet address
-        
-        Args:
-            user_id (int): Internal user ID
-            amount (float): Amount to withdraw
-            wallet_address (str): Capa Wallet address
-            description (str, optional): Withdrawal description
-            
-        Returns:
-            tuple: (success, data/message)
-        """
-        if not description:
-            description = f"Withdrawal from RPS Arena - User {user_id}"
-            
-        if not CAPA_API_KEY or not CAPA_SECRET_KEY:
-            # Mock withdrawal for testing
-            withdrawal_id = f"mock_withdrawal_{int(time.time())}"
-            return True, {
-                "withdrawal_id": withdrawal_id,
-                "status": "pending",
-                "amount": amount,
-                "created_at": int(time.time())
-            }
-        
-        try:
-            headers = {
-                "Authorization": f"Bearer {CAPA_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "amount": amount,
-                "currency": "USD",
-                "destination": wallet_address,
-                "description": description,
-                "metadata": {
-                    "user_id": user_id
-                }
-            }
-            
-            response = requests.post(
-                f"{CAPA_API_URL}/withdrawals",
-                headers=headers,
-                json=payload
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return True, data
-            else:
-                LOGGER.error(f"Capa Wallet API error: {response.status_code} - {response.text}")
-                return False, f"Withdrawal service error: {response.status_code}"
-                
-        except Exception as e:
-            LOGGER.error(f"Error processing Capa Wallet withdrawal: {str(e)}")
-            return False, f"Withdrawal service unavailable: {str(e)}"
-
     @staticmethod
     def verify_webhook_signature(payload, signature_header):
         """

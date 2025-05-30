@@ -1,7 +1,7 @@
-"""Extensions module for Flask application"""
+"""Flask extensions module"""
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
-# Initialize extensions
+# Create extension instances
 db = SQLAlchemy()
 migrate = Migrate()

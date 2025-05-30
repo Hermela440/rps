@@ -1,10 +1,21 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+"""Main Flask application"""
+import sqlalchemy_patch  # Import patch before SQLAlchemy
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from decimal import Decimal
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from extensions import db, migrate
 import os
 import logging
+from account_routes import account_bp
+from payment_routes import payment_bp
+from admin.routes import admin_bp
+from webhooks import webhooks
+from dotenv import load_dotenv
+from config import Config
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -13,46 +24,21 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger(__name__)
 
-def create_app():
-    """Create and configure the Flask application"""
-    app = Flask(__name__)
-    
-    # Configure database
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rps_game.db'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'connect_args': {'check_same_thread': False}  # Required for SQLite
-    }
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_123')
-    
-    # Initialize extensions
-    db.init_app(app)
-    migrate.init_app(app, db)
-    
-    return app
-
-# Create the Flask application
-app = create_app()
-
-# Import models after db initialization to avoid circular imports
+# Import models before init_db to avoid NameError
 from models import User, Room, RoomPlayer, Transaction, WithdrawalRequest, DailyStats, Cooldown
 
-def init_db():
+def init_db(app):
     """Initialize the database"""
     try:
         # Create database directory if it doesn't exist
-        db_dir = os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', ''))
+        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+        db_dir = os.path.dirname(db_path)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
-            LOGGER.info("Created database directory")
+            LOGGER.info(f"Created database directory: {db_dir}")
         
-        # Drop all tables if they exist
         with app.app_context():
-            db.drop_all()
-            LOGGER.info("Dropped existing tables")
-        
-        # Create all tables
-        with app.app_context():
+            # Create tables if they don't exist
             db.create_all()
             LOGGER.info("Created all tables")
             
@@ -61,26 +47,56 @@ def init_db():
             LOGGER.info("Database connection test successful")
             
             # Create initial admin user if none exists
-            admin = User.query.filter_by(is_admin=True).first()
-            if not admin:
-                admin = User(
-                    telegram_id=123456789,  # Replace with actual admin Telegram ID
-                    username='admin',
-                    balance=0.0,
-                    wins=0,
-                    losses=0,
-                    is_admin=True,
-                    created_at=datetime.utcnow()
-                )
-                db.session.add(admin)
-                db.session.commit()
-                LOGGER.info("Initial admin user created")
+            try:
+                admin = User.query.filter_by(is_admin=True).first()
+                if not admin:
+                    admin = User(
+                        telegram_id=123456789,  # Default admin ID
+                        username='admin',
+                        full_name='System Administrator',
+                        email='admin@system.local',
+                        password='admin123',  # Default admin password
+                        balance=0.0,
+                        wins=0,
+                        losses=0,
+                        is_admin=True,
+                        created_at=datetime.utcnow()
+                    )
+                    db.session.add(admin)
+                    db.session.commit()
+                    LOGGER.info("Initial admin user created")
+            except Exception as e:
+                LOGGER.warning(f"Could not query admin user, may need to run migrations: {e}")
             
             LOGGER.info("Database initialized successfully")
             
     except Exception as e:
         LOGGER.error(f"Failed to initialize database: {e}")
         raise
+
+def create_app(config_class=Config):
+    """Create and configure the Flask application"""
+    app = Flask(__name__)
+    app.config.from_object(config_class)
+    
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
+    
+    # Register blueprints
+    app.register_blueprint(webhooks, url_prefix='/webhooks')
+    app.register_blueprint(account_bp)
+    app.register_blueprint(payment_bp)
+    app.register_blueprint(admin_bp)
+    
+    # Initialize database
+    with app.app_context():
+        init_db(app)
+    
+    return app
+
+# Create the Flask application
+app = create_app()
 
 # Routes
 @app.route('/')
@@ -89,40 +105,42 @@ def index():
 
 @app.route('/deposit', methods=['GET', 'POST'])
 def deposit():
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user_id:
+        flash('You must be logged in to make a deposit.', 'danger')
+        return render_template('deposit.html', user=None, test_mode=app.config['TEST_MODE'])
+
     if request.method == 'POST':
-        amount = request.form.get('amount')
-        if not amount:
-            flash('Please enter an amount', 'error')
-            return redirect(url_for('deposit'))
-        
         try:
-            amount = Decimal(amount)
-            if amount < Decimal('10.00'):
-                flash('Minimum deposit amount is ETB 10.00', 'error')
-                return redirect(url_for('deposit'))
-            if amount > Decimal('1000.00'):
-                flash('Maximum deposit amount is ETB 1000.00', 'error')
-                return redirect(url_for('deposit'))
-            
-            # Create a pending transaction
-            transaction = Transaction(
-                user_id=1,  # Replace with actual user ID
-                amount=amount,
-                transaction_type='deposit',
-                status='pending',
-                reference_id=f"DEP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-            )
-            db.session.add(transaction)
-            db.session.commit()
-            
-            # Redirect to payment processing
-            return redirect(url_for('process_payment', transaction_id=transaction.id))
-            
-        except (ValueError, decimal.InvalidOperation):
-            flash('Invalid amount', 'error')
-            return redirect(url_for('deposit'))
-    
-    return render_template('deposit.html')
+            amount = float(request.form.get('amount', 0))
+            from payments import PaymentSystem
+            valid, message = PaymentSystem.validate_amount(amount, 'deposit')
+            if not valid:
+                flash(message, 'danger')
+                return render_template('deposit.html', user=user, test_mode=app.config['TEST_MODE'])
+
+            from payment_service import PaymentService
+            payment_service = PaymentService()
+            success, result = payment_service.create_deposit(user_id, amount)
+
+            if success:
+                if isinstance(result, dict) and 'checkout_url' in result:
+                    return redirect(result['checkout_url'])
+                flash(f'Test deposit of ETB {amount:.2f} completed successfully!', 'success')
+                return redirect(url_for('profile'))
+            else:
+                flash(result, 'danger')
+                return render_template('deposit.html', user=user, test_mode=app.config['TEST_MODE'])
+
+        except ValueError:
+            flash('Invalid amount.', 'danger')
+            return render_template('deposit.html', user=user, test_mode=app.config['TEST_MODE'])
+        except Exception as e:
+            flash(f'An error occurred: {str(e)}', 'danger')
+            return render_template('deposit.html', user=user, test_mode=app.config['TEST_MODE'])
+
+    return render_template('deposit.html', user=user, test_mode=app.config['TEST_MODE'])
 
 @app.route('/process_payment/<int:transaction_id>')
 def process_payment(transaction_id):
@@ -204,6 +222,4 @@ def admin_dashboard():
                          pending_withdrawals=pending_withdrawals)
 
 if __name__ == '__main__':
-    with app.app_context():
-        init_db()  # Initialize database only when running the app directly
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))

@@ -1,83 +1,143 @@
-"""Payment routes for handling Chapa callbacks and success"""
-from flask import Blueprint, request, jsonify, redirect, url_for
+"""Payment routes for handling deposits and withdrawals"""
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import login_required, current_user
+from decimal import Decimal
+from extensions import db
+from models import Transaction
 from payment_service import PaymentService
-from app import app
+from config import TEST_MODE
 
-payment_bp = Blueprint('payment', __name__)
+payment_bp = Blueprint('payment', __name__, url_prefix='/payment')
 
-@payment_bp.route('/payment/callback', methods=['POST'])
-def payment_callback():
-    """Handle Chapa webhook callback"""
-    # Verify signature
-    signature = request.headers.get('X-Chapa-Signature')
-    if not signature:
-        return jsonify({'status': 'error', 'message': 'No signature provided'}), 400
-    
-    # Get raw request body
-    payload = request.get_data()
-    if not PaymentService.verify_webhook_signature(signature, payload):
-        return jsonify({'status': 'error', 'message': 'Invalid signature'}), 400
-    
-    # Process the webhook
-    data = request.json
-    tx_ref = data.get('tx_ref')
-    if not tx_ref:
-        return jsonify({'status': 'error', 'message': 'No transaction reference'}), 400
-    
-    # Verify the payment
-    success, message = PaymentService.verify_payment(tx_ref)
-    if success:
-        return jsonify({'status': 'success', 'message': message}), 200
-    else:
-        return jsonify({'status': 'error', 'message': message}), 400
+@payment_bp.route('/methods')
+def payment_methods():
+    """Get available payment methods"""
+    return jsonify({
+        "methods": [
+            {
+                "id": "chapa",
+                "name": "Chapa",
+                "description": "Pay with Chapa",
+                "icon": "chapa-icon.png"
+            }
+        ]
+    })
 
-@payment_bp.route('/payment/success')
-def payment_success():
-    """Handle successful payment redirect"""
-    tx_ref = request.args.get('tx_ref')
-    if not tx_ref:
-        return "Payment verification failed: No transaction reference", 400
-    
-    # Verify the payment
-    success, message = PaymentService.verify_payment(tx_ref)
-    if success:
-        return f"Payment successful! {message}"
-    else:
-        return f"Payment verification failed: {message}", 400
+@payment_bp.route('/deposit', methods=['GET'])
+@login_required
+def deposit():
+    """Show deposit form"""
+    return render_template('deposit.html', user=current_user)
 
 @payment_bp.route('/deposit', methods=['POST'])
-def initiate_deposit():
-    """Initiate a deposit"""
-    data = request.json
-    user_id = data.get('user_id')
-    amount = data.get('amount')
-    
-    if not user_id or not amount:
-        return jsonify({
-            'status': 'error',
-            'message': 'Missing user_id or amount'
-        }), 400
-    
+@login_required
+def process_deposit():
+    """Process deposit request"""
     try:
-        amount = float(amount)
-    except ValueError:
-        return jsonify({
-            'status': 'error',
-            'message': 'Invalid amount'
-        }), 400
-    
-    success, message, checkout_url = PaymentService.initialize_payment(user_id, amount)
-    if success:
-        return jsonify({
-            'status': 'success',
-            'message': message,
-            'checkout_url': checkout_url
-        })
-    else:
-        return jsonify({
-            'status': 'error',
-            'message': message
-        }), 400
+        amount = Decimal(request.form.get('amount', '0'))
+        if amount <= 0:
+            flash('Invalid amount', 'error')
+            return redirect(url_for('payment.deposit'))
+        
+        # Initialize payment
+        success, message, checkout_url = PaymentService.initialize_payment(
+            current_user.id,
+            float(amount),
+            test_mode=TEST_MODE
+        )
+        
+        if success:
+            if checkout_url:
+                return redirect(checkout_url)
+            flash('Deposit completed successfully', 'success')
+            return redirect(url_for('payment.success'))
+        else:
+            flash(message, 'error')
+            return redirect(url_for('payment.deposit'))
+            
+    except Exception as e:
+        flash(f'Error processing deposit: {str(e)}', 'error')
+        return redirect(url_for('payment.deposit'))
 
-# Register the blueprint
-app.register_blueprint(payment_bp) 
+@payment_bp.route('/initialize', methods=['POST'])
+@login_required
+def initialize_payment():
+    """Initialize a new payment"""
+    try:
+        data = request.get_json()
+        amount = Decimal(str(data.get('amount', 0)))
+        
+        if amount <= 0:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid amount'
+            }), 400
+        
+        success, message, checkout_url = PaymentService.initialize_payment(
+            current_user.id,
+            float(amount),
+            test_mode=TEST_MODE
+        )
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message,
+                'checkout_url': checkout_url
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': message
+            }), 400
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@payment_bp.route('/callback', methods=['POST'])
+def payment_callback():
+    """Handle Chapa webhook callback"""
+    try:
+        data = request.get_json()
+        tx_ref = data.get('tx_ref')
+        
+        if not tx_ref:
+            return jsonify({'status': 'error', 'message': 'Missing transaction reference'}), 400
+        
+        success, message, payment_data = PaymentService.verify_payment(tx_ref)
+        
+        if success:
+            return jsonify({'status': 'success', 'message': message})
+        else:
+            return jsonify({'status': 'error', 'message': message}), 400
+            
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@payment_bp.route('/success')
+@login_required
+def success():
+    """Handle successful payment redirect"""
+    tx_ref = request.args.get('tx_ref')
+    if tx_ref:
+        success, message, payment_data = PaymentService.verify_payment(tx_ref)
+        if success:
+            flash('Payment completed successfully', 'success')
+        else:
+            flash(message, 'error')
+    return redirect(url_for('payment.complete'))
+
+@payment_bp.route('/complete')
+@login_required
+def complete():
+    """Show payment completion page"""
+    return render_template('payment_complete.html', user=current_user)
+
+@payment_bp.route('/error')
+@login_required
+def error():
+    """Show payment error page"""
+    return render_template('payment_error.html', user=current_user) 
